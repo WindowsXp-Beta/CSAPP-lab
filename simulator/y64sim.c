@@ -407,9 +407,9 @@ stat_t nexti(y64sim_t *sim)
     	sim->pc = next_pc;
     	break;
       case I_RRMOVQ:  /* 2:x regA:regB */
-            if (!reg_exist || ((rB > 14) || (rB < 0)) ||((rA > 14) || (rA < 0)))
+            if (!reg_exist || ((rB > 14)||(rB < 0)) || ((rA > 14)||(rA < 0)))
             {
-                err_print("PC = 0x%lx, Invalid instruction", sim->pc);
+                //err_print("PC = 0x%lx, Invalid instruction", sim->pc);
                 return STAT_INS; 
             }
             
@@ -417,7 +417,7 @@ stat_t nexti(y64sim_t *sim)
       case I_IRMOVQ: /* 3:0 F:regB imm */
             if (!reg_exist || !im_exist || rA != 15 || ((rB > 14) || (rB < 0)))
             {
-                err_print("PC = 0x%lx, Invalid instruction", sim->pc);
+                //err_print("PC = 0x%lx, Invalid instruction", sim->pc);
                 return STAT_INS;
             }
             set_reg_val(sim->r, rB, immediate);
