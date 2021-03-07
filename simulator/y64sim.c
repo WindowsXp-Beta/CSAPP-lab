@@ -425,6 +425,7 @@ stat_t nexti(y64sim_t *sim)
                 return STAT_INS;
             }
             set_reg_val(sim->r, rB, immediate);
+            sim->pc = next_pc;
             break;
       case I_RMMOVQ: /* 4:0 regA:regB imm */
       case I_MRMOVQ: /* 5:0 regB:regA imm */
