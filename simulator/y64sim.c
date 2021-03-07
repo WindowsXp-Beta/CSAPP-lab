@@ -379,24 +379,28 @@ stat_t nexti(y64sim_t *sim)
     /* get registers if needed (1 byte) */
     regid_t rA, rB;
     bool_t reg_exist = TRUE;
-    if (!get_byte_val(sim->m, next_pc, &codefun))
+    if (icode == I_RRMOVQ || icode == I_IRMOVQ || icode == I_RMMOVQ || icode == I_ALU || icode == I_PUSHQ || icode == I_POPQ)
     {
-        reg_exist = FALSE;
-    }
-    else {
-        rA = GET_REGA(codefun);
-        rB = GET_REGB(codefun);
-        next_pc++;
+            if (!get_byte_val(sim->m, next_pc, &codefun)) {
+                reg_exist = FALSE;
+        }
+            else {
+                rA = GET_REGA(codefun);
+                rB = GET_REGB(codefun);
+                next_pc++;
+        }      
     }
     /* get immediate if needed (8 bytes) */
     long_t immediate;
     bool_t im_exist = TRUE;
-    if (!get_long_val(sim->m, next_pc, &immediate))
+    if (icode == I_IRMOVQ || icode == I_RMMOVQ || icode == I_MRMOVQ || icode == I_JMP || icode == I_CALL)
     {
-        im_exist = FALSE;
-    }
-    else {
-        next_pc+=8;
+        if (!get_long_val(sim->m, next_pc, &immediate)) {
+            im_exist = FALSE;
+        }
+        else {
+            next_pc+=8;
+        }
     }
     /* execute the instruction*/
     switch (icode) {
@@ -409,7 +413,7 @@ stat_t nexti(y64sim_t *sim)
       case I_RRMOVQ:  /* 2:x regA:regB */
             if (!reg_exist || ((rB > 14)||(rB < 0)) || ((rA > 14)||(rA < 0)))
             {
-                err_print("PC = 0x%lx, Invalid instruction", sim->pc);
+                err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
                 return STAT_INS; 
             }
             
@@ -417,7 +421,7 @@ stat_t nexti(y64sim_t *sim)
       case I_IRMOVQ: /* 3:0 F:regB imm */
             if (!reg_exist || !im_exist || rA != 15 || ((rB > 14) || (rB < 0)))
             {
-                err_print("PC = 0x%lx, Invalid instruction", sim->pc);
+                err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
                 return STAT_INS;
             }
             set_reg_val(sim->r, rB, immediate);
