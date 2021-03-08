@@ -419,21 +419,72 @@ stat_t nexti(y64sim_t *sim)
             
             break;
       case I_IRMOVQ: /* 3:0 F:regB imm */
-            if (!reg_exist || !im_exist || rA != 15 || ((rB > 14) || (rB < 0)))
-            {
+            if (!reg_exist || !im_exist || rA != 15 || ((rB > 14) || (rB < 0))) {
                 err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
                 return STAT_INS;
             }
             set_reg_val(sim->r, rB, immediate);
             sim->pc = next_pc;
             break;
-      case I_RMMOVQ: /* 4:0 regA:regB imm */
-      case I_MRMOVQ: /* 5:0 regB:regA imm */
+      case I_RMMOVQ: /* 4:0 regA:regB imm */ //register -> memory
+            if (!reg_exist || !im_exist || ((rA > 14) || (rA < 0)) || ((rB > 14) || (rB < 0))) {
+                err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
+                return STAT_INS;
+            }
+            long_t val_A = get_reg_val(sim->r, rA);
+            long_t val_B = get_reg_val(sim->r, rB);
+            long_t dest_M = val_B + immediate;
+            if(!set_long_val(sim->m, dest_M, val_A)) return STAT_ADR;
+            sim->pc = next_pc;
+            break;
+      case I_MRMOVQ: /* 5:0 regB:regA imm */ //memory -> register
+            if (!reg_exist || !im_exist || ((rA > 14) || (rA < 0)) || ((rB > 14) || (rB < 0))) {
+                err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
+                return STAT_INS;
+            }
+           long_t new_val_A;
+           long_t val_B = get_reg_val(sim->r, rB);
+           long_t source = val_B + immediate;
+           if (!get_long_val(sim->m, source, &new_val_A)) return STAT_ADR;
+           set_reg_val(sim->r, rA, new_val_A);
+           sim->pc = next_pc;
+           break;
       case I_ALU: /* 6:x regA:regB */
+           if (!reg_exist || ((rA > 14) || (rA < 0)) || ((rB > 14) || (rB < 0))) {
+                err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
+                return STAT_INS;
+            } 
+            long_t val_A, val_B;
+            val_A = get_reg_val(sim->r, rA);
+            val_B = get_reg_val(sim->r, rB);
+            long_t new_val_B = compute_alu(ifun, val_A, val_B);
+            compute_cc(ifun, val_A, val_B, new_val_B);
+            set_reg_val(sim->r, rB, new_val_B);
+            sim->pc = next_pc;
       case I_JMP: /* 7:x imm */
+            if (!im_exist) {
+                err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
+                return STAT_INS;
+            }
+            
       case I_CALL: /* 8:x imm */
+           if (!im_exist) {
+                err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
+                return STAT_INS;
+            } 
+            long stack = 
       case I_RET: /* 9:0 */
       case I_PUSHQ: /* A:0 regA:F */
+           if (!reg_exist || ((rA > 14) || (rA < 0)) || rB != 15) {
+                err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
+                return STAT_INS;
+            }
+            long_t stack = get_reg_val(sim->r, REG_RSP);
+            long_t val_A = get_reg_val(sim->r, rA);
+            stack-=8;
+            if (!set_long_val(sim->m, stack, val_A)) return STAT_ADR;
+            set_reg_val(sim->r, REG_RSP, stack);
+            sim->pc = next_pc;
       case I_POPQ: /* B:0 regA:F */
     	return STAT_INS; /* unsupported now, replace it with your implementation */
     	break;
