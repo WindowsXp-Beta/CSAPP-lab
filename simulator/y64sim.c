@@ -403,20 +403,28 @@ stat_t nexti(y64sim_t *sim)
     }
     /* execute the instruction*/
     switch (icode) {
-      case I_HALT: /* 0:0 */
-	    return STAT_HLT;
-	    break;
-      case I_NOP: /* 1:0 */
-    	sim->pc = next_pc;
-    	break;
+      case I_HALT: /* 0:0 */ //checked!!!
+	    {
+            return STAT_HLT;
+	        break;
+        }
+      case I_NOP: /* 1:0 */ //checked!!!
+    	{
+            sim->pc = next_pc;
+    	    break;
+        }
       case I_RRMOVQ:  /* 2:x regA:regB */
         {
-            if (!reg_exist || ((rB > 14)||(rB < 0)) || ((rA > 14)||(rA < 0)))
+            if (!reg_exist || (ifun > 6 || ifun < 0) || ((rB > 14)||(rB < 0)) || ((rA > 14)||(rA < 0)))
             {
                 err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
                 return STAT_INS; 
             }
-            
+            long_t val_A = get_reg_val(sim->r, rA);
+            if (cond_doit(sim->cc, ifun)) {
+                set_reg_val(sim->r, rB, val_A);
+            }
+            sim->pc = next_pc;
             break;
         }
       case I_IRMOVQ: /* 3:0 F:regB imm */ //checked!!!
@@ -461,7 +469,7 @@ stat_t nexti(y64sim_t *sim)
         }
       case I_ALU: /* 6:x regA:regB */ //checked!!!
         { 
-            if (!reg_exist || ((rA > 14) || (rA < 0)) || ((rB > 14) || (rB < 0))) {
+            if (!reg_exist || (ifun < 0 || ifun > 3) || ((rA > 14) || (rA < 0)) || ((rB > 14) || (rB < 0))) {
                 err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
                 return STAT_INS;
             } 
@@ -475,20 +483,44 @@ stat_t nexti(y64sim_t *sim)
         }
       case I_JMP: /* 7:x imm */
         {
-            if (!im_exist) {
+            if (!im_exist || (ifun < 0 || ifun > 6)) {
                 err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
                 return STAT_INS;
             }
+            if (cond_doit(sim->cc, ifun)) {
+                sim->pc = immediate;
+            }
+            else {
+                sim->pc = next_pc;
+            }
             break;
-        }      
+        }  
       case I_CALL: /* 8:x imm */
         {
            if (!im_exist) {
                 err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
                 return STAT_INS;
             }
+            long_t stack = get_reg_val(sim->r, REG_RSP);
+            stack-=8;
+            set_long_val(sim->r, stack, next_pc);
+            set_reg_val(sim->r, REG_RSP, stack);
+            sim->pc = immediate;
+            break;
         } 
       case I_RET: /* 9:0 */
+        {
+            long_t stack = get_reg_val(sim->r, REG_RSP);
+            long_t dest;
+            if(!get_long_val(sim->m, stack, &dest)) {
+                err_print("PC = 0x%lx, Invalid stack address 0x%.16lx", sim->pc, stack);
+                return STAT_ADR;
+            }
+            stack+=8;
+            set_reg_val(sim->r, REG_RSP, stack);
+            sim->pc = dest;
+            break;
+        }
       case I_PUSHQ: /* A:0 regA:F */ //checked!!!
         {
            if (!reg_exist || ((rA > 14) || (rA < 0)) || rB != 15) {
@@ -507,8 +539,21 @@ stat_t nexti(y64sim_t *sim)
             break;
         }
       case I_POPQ: /* B:0 regA:F */
-    	return STAT_INS; /* unsupported now, replace it with your implementation */
-    	break;
+        {
+            if (!reg_exist || (rA > 14 || rA < 0) || (rB != 15)) {
+                err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
+                return STAT_INS;
+            }
+            long_t stack = get_reg_val(sim->r, REG_RSP);
+            long_t val_pop;
+            if (!get_long_val(sim->m, stack, &val_pop)) {
+                err_print("PC = 0x%lx, Invalid stack address 0x%.16lx", sim->pc, stack);
+                return STAT_ADR;
+            }
+            set_reg_val(sim->r, REG_RSP, val_pop);
+            sim->pc = next_pc;
+            break;
+        }
       default:
     	err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
     	return STAT_INS;
