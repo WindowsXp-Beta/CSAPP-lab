@@ -334,13 +334,13 @@ bool_t cond_doit(cc_t cc, cond_t cond)
         doit = zero;
         break;
     case C_NE:
-        doit = ~ zero;
+        doit = 1 - zero;
         break;
     case C_GE:
-        doit = ~ (sign ^ ovf);
+        doit = 1 - (sign ^ ovf);
         break;
     case C_G:
-        doit = ~ (sign ^ ovf) & ~zero;
+        doit = (1 - (sign ^ ovf)) & (1 - zero);
         break;
     }
     return doit;
@@ -378,7 +378,7 @@ stat_t nexti(y64sim_t *sim)
     /* get registers if needed (1 byte) */
     regid_t rA, rB;
     bool_t reg_exist = TRUE;
-    if (icode == I_RRMOVQ || icode == I_IRMOVQ || icode == I_RMMOVQ || icode == I_ALU || icode == I_PUSHQ || icode == I_POPQ)
+    if (icode == I_RRMOVQ || icode == I_IRMOVQ || icode == I_RMMOVQ || icode == I_MRMOVQ || icode == I_ALU || icode == I_PUSHQ || icode == I_POPQ)
     {
             if (!get_byte_val(sim->m, next_pc, &codefun)) {
                 reg_exist = FALSE;
@@ -453,8 +453,8 @@ stat_t nexti(y64sim_t *sim)
       case I_MRMOVQ: /* 5:0 regB:regA imm */ //memory -> register
         {
             if (!reg_exist || !im_exist || ((rA > 14) || (rA < 0)) || ((rB > 14) || (rB < 0))) {
-                //err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
-                //return STAT_INS;
+                err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
+                return STAT_INS;
             }
             long_t val_B = get_reg_val(sim->r, rB);
             long_t new_val_A;
@@ -481,7 +481,7 @@ stat_t nexti(y64sim_t *sim)
             sim->pc = next_pc;
             break;
         }
-      case I_JMP: /* 7:x imm */
+      case I_JMP: /* 7:x imm */  //jmp je jl jge jle 
         {
             if (!im_exist || (ifun < 0 || ifun > 6)) {
                 err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
@@ -495,20 +495,24 @@ stat_t nexti(y64sim_t *sim)
             }
             break;
         }  
-      case I_CALL: /* 8:x imm */
+      case I_CALL: /* 8:x imm */ //checked!!!
         {
            if (!im_exist) {
                 err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
                 return STAT_INS;
             }
-            long_t stack = get_reg_val(sim->r, REG_RSP);
+            long_t stack = get_reg_val(sim->r, REG_RSP);  //stack address should be greater than 0
             stack-=8;
             set_long_val(sim->r, stack, next_pc);
             set_reg_val(sim->r, REG_RSP, stack);
+            if (stack < 0) {
+                err_print("PC = 0x%lx, Invalid stack address 0x%.16lx", sim->pc, stack);
+                return STAT_ADR;
+            }
             sim->pc = immediate;
             break;
         } 
-      case I_RET: /* 9:0 */
+      case I_RET: /* 9:0 */ //checked!!!
         {
             long_t stack = get_reg_val(sim->r, REG_RSP);
             long_t dest;
@@ -538,7 +542,7 @@ stat_t nexti(y64sim_t *sim)
             sim->pc = next_pc;
             break;
         }
-      case I_POPQ: /* B:0 regA:F */
+      case I_POPQ: /* B:0 regA:F */  //checked!!!
         {
             if (!reg_exist || (rA > 14 || rA < 0) || (rB != 15)) {
                 err_print("PC = 0x%lx, Invalid instruction %.2x", sim->pc, codefun);
@@ -550,7 +554,9 @@ stat_t nexti(y64sim_t *sim)
                 err_print("PC = 0x%lx, Invalid stack address 0x%.16lx", sim->pc, stack);
                 return STAT_ADR;
             }
-            set_reg_val(sim->r, REG_RSP, val_pop);
+            stack+=8;
+            set_reg_val(sim->r, REG_RSP, stack);
+            set_reg_val(sim->r, rA, val_pop);
             sim->pc = next_pc;
             break;
         }
