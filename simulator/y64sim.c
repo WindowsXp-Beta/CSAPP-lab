@@ -293,13 +293,21 @@ cc_t compute_cc(alu_t op, long_t argA, long_t argB, long_t val)
     bool_t zero = (val == 0);
     bool_t sign = ((int)val < 0);
     bool_t ovf = FALSE;
+    if (op == A_ADD) {
+        ovf = ((argA < 0) == (argB < 0)) && ((val < 0) != (argA < 0));
+    }
+    if (op == A_SUB) {
+        ovf = ((argA < 0) != (argB < 0)) && ((val < 0) == (argA < 0));
+    }
+    /*
     if ( op == 0 || op == 1)
     {
-        if ((argA < 0)==(argB < 0) && (val < 0 != argA < 0))
+        if (((argA < 0) == (argB < 0)) && ((val <= 0) != (argA < 0)))
         {
             ovf = TRUE;
         }
     }
+    */
     return PACK_CC(zero,sign,ovf);  
 }
 
@@ -503,9 +511,8 @@ stat_t nexti(y64sim_t *sim)
             }
             long_t stack = get_reg_val(sim->r, REG_RSP);  //stack address should be greater than 0
             stack-=8;
-            set_long_val(sim->r, stack, next_pc);
             set_reg_val(sim->r, REG_RSP, stack);
-            if (stack < 0) {
+            if (!set_long_val(sim->m, stack, next_pc)) {
                 err_print("PC = 0x%lx, Invalid stack address 0x%.16lx", sim->pc, stack);
                 return STAT_ADR;
             }
