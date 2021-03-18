@@ -230,7 +230,8 @@ parse_t parse_delim(char **ptr, char delim)
     }
     /* set 'ptr' */
     if (**ptr == delim) {
-        *ptr++;
+        (*ptr)++;
+        //attention: ++ has higher priority to * !!!
         return PARSE_DELIM;
     }
     return PARSE_ERR;
@@ -422,7 +423,7 @@ parse_t parse_label(char **ptr, char **name)
         char **p = ptr;
         int len = 0;//len代表label的长度
         while( **p != ':') {
-            *p++;
+            (*p)++;
             len++;
         }
         /* allocate name and copy to it */
@@ -487,7 +488,7 @@ type_t parse_line(line_t *line)
         line->y64bin.addr = vmaddr;
         line->y64bin.bytes = inst -> bytes;
         line->y64bin.codes[0] = inst -> code;
-    }
+    
     /* set type and y64bin */
 
     /* update vmaddr */    
@@ -502,7 +503,7 @@ type_t parse_line(line_t *line)
         case I_RRMOVQ :
         case I_ALU : //need to read two registers
         {
-            if ( parse_reg(&point, &rA) == PARSE_REG && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
+            if (parse_reg(&point, &rA) == PARSE_REG && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
                 line->y64bin.codes[1] = HPACK(rA, rB);
                 return line->type;
             }
@@ -523,12 +524,12 @@ type_t parse_line(line_t *line)
             if (parse_delim(&point, '$') == PARSE_DELIM && parse_digit(&point, &value) == PARSE_DIGIT && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
                 line->y64bin.codes[1] = HPACK(REG_NONE, rB);
                 for (int i = 2; i < 10; i++) {
-                    line->y64bin.codes[i] = ((value >> (i - 2)) & 0xff);//小端法放置
-                    return line->type;
+                    line->y64bin.codes[i] = ((value >> ((i - 2) * 8)) & 0xff);//小端法放置
                 }
-                
-            } 
+                return line->type;
+            }
         }
+    }
     }
     line->type = TYPE_ERR;
     return line->type;
@@ -635,6 +636,7 @@ int binfile(FILE *out)
         p = line_head->next;
         while (p) {
             fwrite(p->y64bin.codes, p->y64bin.bytes, 1, out);
+            p = p->next;
         }
     }
     return 0;
