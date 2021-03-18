@@ -199,7 +199,7 @@ parse_t parse_instr(char **ptr, instr_t **inst)
     SKIP_BLANK(*ptr);
     /* find_instr and check end */
     if (IS_END(*ptr)) {
-        return 
+        return PARSE_ERR;
     }
     instr_t *inst_tmp = find_instr(*ptr);
     /* set 'ptr' and 'inst' */
@@ -229,7 +229,7 @@ parse_t parse_delim(char **ptr, char delim)
         return PARSE_ERR;
     }
     /* set 'ptr' */
-    if (*ptr == delim) {
+    if (**ptr == delim) {
         *ptr++;
         return PARSE_DELIM;
     }
@@ -255,7 +255,7 @@ parse_t parse_reg(char **ptr, regid_t *regid)
         return PARSE_ERR;
     }
     /* find register */
-    reg_t * reg_tmp = find_register(*ptr);
+    const reg_t * reg_tmp = find_register(*ptr);
     /* set 'ptr' and 'regid' */
     if (reg_tmp != NULL) {
         *regid = reg_tmp->id;
@@ -421,7 +421,7 @@ parse_t parse_label(char **ptr, char **name)
     if (*ptr != NULL) {
         char **p = ptr;
         int len = 0;//len代表label的长度
-        while( *p != ':') {
+        while( **p != ':') {
             *p++;
             len++;
         }
@@ -472,7 +472,7 @@ type_t parse_line(line_t *line)
     }
     /* is a label ? */
     if (*point >= 'A' || *point <= 'Z') {
-        line -> type = parse_label(point, &name);
+        line -> type = parse_label(&point, &name);
         if( add_symbol(name) == 0) {
             line->type = TYPE_INS;
             line->y64bin.addr = vmaddr;
@@ -520,7 +520,7 @@ type_t parse_line(line_t *line)
         case I_IRMOVQ : //read rB; rA is None; read immediate;
         {
             // irmovq $num,%reg
-            if (parse_delim(&point, '$') == PARSE_DELIM && parse_digit(&point, &value) == parse_digit && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, rB) == PARSE_REG) {
+            if (parse_delim(&point, '$') == PARSE_DELIM && parse_digit(&point, &value) == PARSE_DIGIT && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
                 line->y64bin.codes[1] = HPACK(REG_NONE, rB);
                 for (int i = 2; i < 10; i++) {
                     line->y64bin.codes[i] = ((value >> (i - 2)) & 0xff);//小端法放置
@@ -634,7 +634,7 @@ int binfile(FILE *out)
     if (line_head) {
         p = line_head->next;
         while (p) {
-            fwrite(out, p->y64bin.bytes, 1, out);
+            fwrite(p->y64bin.codes, p->y64bin.bytes, 1, out);
         }
     }
     return 0;
