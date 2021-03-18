@@ -38,10 +38,11 @@ const reg_t reg_table[REG_NONE] = {
     {"%r14", REG_R14, 4}
 };
 const reg_t* find_register(char *name)
+//input:字符串 output:字符串对应的寄存器struct指针
 {
     int i;
     for (i = 0; i < REG_NONE; i++)
-        if (!strncmp(name, reg_table[i].name, reg_table[i].namelen))
+        if (!strncmp(name, reg_table[i].name, reg_table[i].namelen))//strncmp为字符串比较函数
             return &reg_table[i];
     return NULL;
 }
@@ -49,6 +50,7 @@ const reg_t* find_register(char *name)
 
 /* instruction set */
 instr_t instr_set[] = {
+//{命令字符串，命令字符串长度，命令对应的机器码(icode:ifun)，命令长度}
     {"nop", 3,   HPACK(I_NOP, F_NONE), 1 },
     {"halt", 4,  HPACK(I_HALT, F_NONE), 1 },
     {"rrmovq", 6,HPACK(I_RRMOVQ, F_NONE), 2 },
@@ -81,11 +83,12 @@ instr_t instr_set[] = {
     {".long", 5, HPACK(I_DIRECTIVE, D_DATA), 4 },
     {".quad", 5, HPACK(I_DIRECTIVE, D_DATA), 8 },
     {".pos", 4,  HPACK(I_DIRECTIVE, D_POS), 0 },
-    {".align", 6,HPACK(I_DIRECTIVE, D_ALIGN), 0 },
+    {".align", 6,HPACK(I_DIRECTIVE, D_ALIGN),  0 },
     {NULL, 1,    0   , 0 } //end
 };
 
 instr_t *find_instr(char *name)
+//找到name对应的命令struct
 {
     int i;
     for (i = 0; instr_set[i].name; i++)
@@ -96,6 +99,7 @@ instr_t *find_instr(char *name)
 
 /* symbol table (don't forget to init and finit it) */
 symbol_t *symtab = NULL;
+//symbol_t = char *name; long long addr; symbol * next;
 
 /*
  * find_symbol: scan table to find the symbol
@@ -108,6 +112,11 @@ symbol_t *symtab = NULL;
  */
 symbol_t *find_symbol(char *name)
 {
+    symbol_t * p = symtab;
+    while (p && p->name != name) {
+        p = p -> next;
+    }
+    if (p && p -> name == name) return p;
     return NULL;
 }
 
@@ -123,11 +132,18 @@ symbol_t *find_symbol(char *name)
 int add_symbol(char *name)
 {
     /* check duplicate */
-
+    if (find_symbol(name) != NULL) {
+        err_print();
+        return -1;
+    }
     /* create new symbol_t (don't forget to free it)*/
-
+    symbol_t * new_symbol = (symbol_t *)malloc(sizeof(symbol_t));
     /* add the new symbol_t to symbol table */
-
+    new_symbol -> addr = vmaddr;
+    new_symbol -> name = name;
+    new_symbol -> next = symtab -> next;
+    symtab -> next = new_symbol;
+    //将新symbol插在头指针后
     return 0;
 }
 
@@ -180,11 +196,19 @@ typedef enum { PARSE_ERR=-1, PARSE_REG, PARSE_DIGIT, PARSE_SYMBOL,
 parse_t parse_instr(char **ptr, instr_t **inst)
 {
     /* skip the blank */
-
+    SKIP_BLANK(*ptr);
     /* find_instr and check end */
-
+    if (IS_END(*ptr)) {
+        return 
+    }
+    instr_t *inst_tmp = find_instr(*ptr);
     /* set 'ptr' and 'inst' */
-
+    if (inst_tmp != NULL) {//if instr exist
+        *inst = inst_tmp;
+        //while(!IS_LETTER(*ptr)) *ptr++;
+        *ptr += (*inst)->len;
+        return PARSE_INSTR;
+    }
     return PARSE_ERR;
 }
 
@@ -200,9 +224,15 @@ parse_t parse_instr(char **ptr, instr_t **inst)
 parse_t parse_delim(char **ptr, char delim)
 {
     /* skip the blank and check */
-
+    SKIP_BLANK(*ptr);
+    if ( IS_END(*ptr) ) {
+        return PARSE_ERR;
+    }
     /* set 'ptr' */
-
+    if (*ptr == delim) {
+        *ptr++;
+        return PARSE_DELIM;
+    }
     return PARSE_ERR;
 }
 
@@ -220,11 +250,18 @@ parse_t parse_delim(char **ptr, char delim)
 parse_t parse_reg(char **ptr, regid_t *regid)
 {
     /* skip the blank and check */
-
+    SKIP_BLANK(*ptr);
+    if ( IS_END(*ptr) ) {
+        return PARSE_ERR;
+    }
     /* find register */
-
+    reg_t * reg_tmp = find_register(*ptr);
     /* set 'ptr' and 'regid' */
-
+    if (reg_tmp != NULL) {
+        *regid = reg_tmp->id;
+        *ptr += reg_tmp -> namelen;
+        return PARSE_REG;
+    }
     return PARSE_ERR;
 }
 
@@ -264,11 +301,17 @@ parse_t parse_symbol(char **ptr, char **name)
 parse_t parse_digit(char **ptr, long *value)
 {
     /* skip the blank and check */
-
+    SKIP_BLANK(*ptr);
+    if (IS_END(*ptr)) {
+        return PARSE_ERR;
+    }
     /* calculate the digit, (NOTE: see strtoll()) */
-
+    //char ** end_of_number = ptr;
+    *value = strtoll(*ptr, ptr, 0);
     /* set 'ptr' and 'value' */
-
+    //ptr and value has been set in strtoll
+    if (*value != 0) return PARSE_DIGIT;
+    //strtoll return 0 if it cannot be exchanged
     return PARSE_ERR;
 
 }
@@ -367,13 +410,30 @@ parse_t parse_data(char **ptr, char **name, long *value)
  *     PARSE_ERR: error, the value of 'ptr' is undefined
  */
 parse_t parse_label(char **ptr, char **name)
+//传入一个指向（一个指向line->y64asm的指针，相当于string *p）
+//因为y64asm（存储着这一行的命令字符串）不能变
 {
     /* skip the blank and check */
-
-    /* allocate name and copy to it */
-
-    /* set 'ptr' and 'name' */
-
+    SKIP_BLANK(*ptr);
+    if (IS_END(*ptr)) {
+        return PARSE_ERR;
+    }
+    if (*ptr != NULL) {
+        char **p = ptr;
+        int len = 0;//len代表label的长度
+        while( *p != ':') {
+            *p++;
+            len++;
+        }
+        /* allocate name and copy to it */
+        *name = (char *)malloc(sizeof(char) * (len + 1));
+        memset(*name, '\0', len + 1);
+        /* set 'ptr' and 'name' */
+        //name has been set
+        strncpy(*name, *ptr, len);//dest, src, n
+        *ptr = *p + 1;
+        return PARSE_LABEL;
+    }
     return PARSE_ERR;
 }
 
@@ -395,20 +455,81 @@ type_t parse_line(line_t *line)
 *  Loop: mrmovl (%rbp), %rcx
 *           call SUM  #invoke SUM function */
 
+    instr_t *inst;
+    char *point = line->y64asm;
+    char *name;//name for label
+    regid_t rA, rB;
+    long value;
     /* skip blank and check IS_END */
-    
+    SKIP_BLANK(point);
+    if (IS_END(point)){ //this line is blank
+        return line->type;
+    }
     /* is a comment ? */
-
+    if (IS_COMMENT(line->y64asm)) {
+        line->type = TYPE_COMM;
+        return line->type;
+    }
     /* is a label ? */
-
+    if (*point >= 'A' || *point <= 'Z') {
+        line -> type = parse_label(point, &name);
+        if( add_symbol(name) == 0) {
+            line->type = TYPE_INS;
+            line->y64bin.addr = vmaddr;
+            line->y64bin.bytes = 0;
+            return line->type;
+        };
+    }
     /* is an instruction ? */
-
+    //若label后跟着instruction，直接在下面进行处理
+    if (parse_instr(&point, &inst) == PARSE_INSTR) {
+        line->type = TYPE_INS;
+        line->y64bin.addr = vmaddr;
+        line->y64bin.bytes = inst -> bytes;
+        line->y64bin.codes[0] = inst -> code;
+    }
     /* set type and y64bin */
 
     /* update vmaddr */    
-
+    vmaddr += inst->bytes;
     /* parse the rest of instruction according to the itype */
+    switch (HIGH(inst -> code)) {//switch based on icode
+        case I_HALT :
+        case I_NOP :
+        case I_RET ://halt nop ret 
+        return line->type;
 
+        case I_RRMOVQ :
+        case I_ALU : //need to read two registers
+        {
+            if ( parse_reg(&point, &rA) == PARSE_REG && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
+                line->y64bin.codes[1] = HPACK(rA, rB);
+                return line->type;
+            }
+            break;
+        }
+        case I_PUSHQ :
+        case I_POPQ ://read rA; rB is None
+        {
+            if ( parse_reg(&point, &rA) == PARSE_REG) {
+                line->y64bin.codes[1] = HPACK(rA, REG_NONE);
+                return line->type;
+            }
+            break;
+        }
+        case I_IRMOVQ : //read rB; rA is None; read immediate;
+        {
+            // irmovq $num,%reg
+            if (parse_delim(&point, '$') == PARSE_DELIM && parse_digit(&point, &value) == parse_digit && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, rB) == PARSE_REG) {
+                line->y64bin.codes[1] = HPACK(REG_NONE, rB);
+                for (int i = 2; i < 10; i++) {
+                    line->y64bin.codes[i] = ((value >> (i - 2)) & 0xff);//小端法放置
+                    return line->type;
+                }
+                
+            } 
+        }
+    }
     line->type = TYPE_ERR;
     return line->type;
 }
@@ -426,11 +547,18 @@ int assemble(FILE *in)
 {
     static char asm_buf[MAX_INSLEN]; /* the current line of asm code */
     line_t *line;
+    //line_t: 
+    //type_t(comment,ins,error) type;
+    //bin_t(long long addr;unsigned char codes[10];int bytes;) y64bin;
+    //char *y64asm
+    //line_t *next;
+
     int slen;
     char *y64asm;
 
     /* read y64 code line-by-line, and parse them to generate raw y64 binary code list */
     while (fgets(asm_buf, MAX_INSLEN, in) != NULL) {
+        //fgets 每次读取一行
         slen  = strlen(asm_buf);
         while ((asm_buf[slen-1] == '\n') || (asm_buf[slen-1] == '\r')) { 
             asm_buf[--slen] = '\0'; /* replace terminator */
@@ -449,6 +577,7 @@ int assemble(FILE *in)
 
         line_tail->next = line;
         line_tail = line;
+        
         lineno ++;
 
         if (parse_line(line) == TYPE_ERR) {
@@ -470,7 +599,11 @@ int assemble(FILE *in)
 int relocate(void)
 {
     reloc_t *rtmp = NULL;
-    
+    //reloc_t:
+    //bin_t *y64bin
+    //char *name
+    //reloc * next
+
     rtmp = reltab->next;
     while (rtmp) {
         /* find symbol */
@@ -495,9 +628,15 @@ int relocate(void)
 int binfile(FILE *out)
 {
     /* prepare image with y64 binary code */
-
-    /* binary write y64 code to output file (NOTE: see fwrite()) */
     
+    /* binary write y64 code to output file (NOTE: see fwrite()) */
+    line_t *p;
+    if (line_head) {
+        p = line_head->next;
+        while (p) {
+            fwrite(out, p->y64bin.bytes, 1, out);
+        }
+    }
     return 0;
 }
 
