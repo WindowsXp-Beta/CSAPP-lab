@@ -471,7 +471,7 @@ type_t parse_line(line_t *line)
         return line->type;
     }
     /* is a label ? */
-    if (*point >= 'A' || *point <= 'Z') {
+    if (*point >= 'A' && *point <= 'Z') {
         line -> type = parse_label(&point, &name);
         if( add_symbol(name) == 0) {
             line->type = TYPE_INS;
