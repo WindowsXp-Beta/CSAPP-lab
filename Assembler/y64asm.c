@@ -456,10 +456,11 @@ parse_t parse_label(char **ptr, char **name)
     if (*ptr != NULL) {
         char **p = ptr;
         int len = 0;//len代表label的长度
-        while( **p != ':') {
+        while( **p != ':' && !IS_BLANK(*p)) {
             (*p)++;
             len++;
         }
+        if (IS_BLANK(*p)) return PARSE_ERR;
         /* allocate name and copy to it */
         *name = (char *)malloc(sizeof(char) * (len + 1));
         memset(*name, '\0', len + 1);
@@ -507,7 +508,7 @@ type_t parse_line(line_t *line)
         return line->type;
     }
     /* is a label ? */
-    if (*point >= 'A' && *point <= 'Z') {
+    if (parse_label(&point, &name) == PARSE_LABEL) {
         line -> type = parse_label(&point, &name);
         if( add_symbol(name) == 0) {
             line->type = TYPE_INS;
@@ -611,8 +612,45 @@ type_t parse_line(line_t *line)
             }
             break;
         }
+        case I_DIRECTIVE :
+        {
+            switch (LOW(inst->code)) 
+            {
+                case D_DATA:{
+                    if (parse_data(&point, &name, &value) == PARSE_DIGIT) {
+                        for (int i = 0; i < 8; i++) {
+                            line->y64bin.codes[i] = ((value >> (i * 8)) & 0xff);
+                        }
+                        return line->type;
+                    }
+                    if (parse_data(&point, &name, &value) == PARSE_SYMBOL) {
+                        reloc_t * reloc_ins = (reloc_t *)malloc(sizeof(reloc_t));
+                        reloc_ins -> next = reltab -> next;
+                        reltab -> next = reloc_ins;
+                        reloc_ins -> y64bin = &(line -> y64bin);
+                        return line->type;                    
+                    }
+                }
+                case D_ALIGN : {
+                    if (parse_digit(&point, &value) == PARSE_DIGIT) {
+                        vmaddr = (vmaddr / value) * value +value;
+                        line->y64bin.addr = vmaddr;
+                        line->y64bin.codes[0] = '\0';
+                    }
+                    break;
+                }
+                case D_POS: {
+                    if (parse_digit(&point, &value) == PARSE_DIGIT) {
+                        vmaddr = value;
+                        line->y64bin.addr = vmaddr;
+                        line->y64bin.codes[0] = '\0';
+                    }
+                }
+            }
+            break;
+        }
     }
-    }else return line->type;
+    }else return line->type;//type is comment
     
     line->type = TYPE_ERR;
     return line->type;
