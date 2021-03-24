@@ -112,11 +112,11 @@ symbol_t *symtab = NULL;
  */
 symbol_t *find_symbol(char *name)
 {
-    symbol_t * p = symtab;
-    while (p && p->name != name) {
+    symbol_t * p = symtab -> next;
+    while (p && strcmp(p->name, name)) {
         p = p -> next;
     }
-    if (p && p -> name == name) return p;
+    if (p && !strcmp(p->name, name)) return p;
     return NULL;
 }
 
@@ -133,7 +133,6 @@ int add_symbol(char *name)
 {
     /* check duplicate */
     if (find_symbol(name) != NULL) {
-        err_print();
         return -1;
     }
     /* create new symbol_t (don't forget to free it)*/
@@ -158,7 +157,11 @@ reloc_t *reltab = NULL;
 void add_reloc(char *name, bin_t *bin)
 {
     /* create new reloc_t (don't forget to free it)*/
-    
+    reloc_t * reloc_ins = (reloc_t *)malloc(sizeof(reloc_t));
+    reloc_ins -> next = reltab -> next;
+    reltab -> next = reloc_ins;
+    reloc_ins -> name = name;
+    reloc_ins -> y64bin = bin;
     /* add the new reloc_t to relocation table */
 }
 
@@ -297,7 +300,6 @@ parse_t parse_symbol(char **ptr, char **name)
         memset(*name, '\0', len + 1);
         /* set 'ptr' and 'name' */
         strncpy(*name, p, len);
-        add_symbol(*name);
         return PARSE_SYMBOL;
     }
     return PARSE_ERR;
@@ -427,7 +429,6 @@ parse_t parse_data(char **ptr, char **name, long *value)
     }
     /* if IS_LETTER, then parse the symbol */
     else if (IS_LETTER(*ptr)) {
-        //printf("is letter\n");
         if (parse_symbol(ptr, name) == PARSE_SYMBOL) return PARSE_SYMBOL;
     }
     /* set 'ptr', 'name' and 'value' */
@@ -511,7 +512,10 @@ type_t parse_line(line_t *line)
     /* is a label ? */
     if (parse_label(&point, &name) == PARSE_LABEL) {
         line -> type = parse_label(&point, &name);
-        if( add_symbol(name) == 0) {
+        if( add_symbol(name) == -1){
+            err_print("Dup symbol '%s'", name);
+        } 
+        else {
             line->type = TYPE_INS;
             line->y64bin.addr = vmaddr;
             line->y64bin.bytes = 0;
@@ -612,11 +616,7 @@ type_t parse_line(line_t *line)
             }
             else if (parse_type == PARSE_SYMBOL) {
                 line->y64bin.codes[1] = HPACK(REG_NONE, rB);
-                reloc_t * reloc_ins = (reloc_t *)malloc(sizeof(reloc_t));
-                reloc_ins -> next = reltab -> next;
-                reltab -> next = reloc_ins;
-                reloc_ins -> name = name;
-                reloc_ins -> y64bin = &(line -> y64bin);
+                add_reloc(symbol, &(line -> y64bin));
                 return line->type;
             }
             break;
@@ -681,8 +681,7 @@ type_t parse_line(line_t *line)
         case I_CALL :
         //jxx Dest / call Dest
         {   
-            parse_t parse_type = parse_data(&point, &name, &value);
-            //printf("%s\n", name);
+            parse_t parse_type = parse_data(&point, &symbol, &value);
             if (parse_type == PARSE_ERR) {
                 err_print("Invalid DEST");
             }
@@ -693,11 +692,7 @@ type_t parse_line(line_t *line)
                 return line->type;
             }
             else if (parse_type == PARSE_SYMBOL ) {
-                reloc_t * reloc_ins = (reloc_t *)malloc(sizeof(reloc_t));
-                reloc_ins -> next = reltab -> next;
-                reltab -> next = reloc_ins;
-                //reloc_ins -> name = name;
-                reloc_ins -> y64bin = &(line -> y64bin);
+                add_reloc(symbol, &(line -> y64bin));
                 return line->type;
             }
             break;
@@ -707,7 +702,7 @@ type_t parse_line(line_t *line)
             switch (LOW(inst->code)) 
             {
                 case D_DATA:{
-                    parse_t parse_type = parse_data(&point, &name, &value);
+                    parse_t parse_type = parse_data(&point, &symbol, &value);
                     if (parse_type == PARSE_DIGIT) {
                         for (int i = 0; i < 8; i++) {
                             line->y64bin.codes[i] = ((value >> (i * 8)) & 0xff);
@@ -715,11 +710,7 @@ type_t parse_line(line_t *line)
                         return line->type;
                     }
                     else if (parse_type == PARSE_SYMBOL) {
-                        reloc_t * reloc_ins = (reloc_t *)malloc(sizeof(reloc_t));
-                        reloc_ins -> next = reltab -> next;
-                        reltab -> next = reloc_ins;
-                        reloc_ins -> name = name;
-                        reloc_ins -> y64bin = &(line -> y64bin);
+                        add_reloc(symbol, &(line -> y64bin));
                         return line->type;                    
                     }
                     break;
@@ -827,7 +818,6 @@ int relocate(void)
         /* find symbol */
         symbol_t *s = find_symbol(rtmp->name);
         if (!s) {
-            //printf("%s\n", rtmp->name);
             err_print("Unknown symbol:'%s'", rtmp->name);
             return -1;
         }
@@ -837,7 +827,7 @@ int relocate(void)
             rtmp->y64bin->codes[i] = ((dest >> ((i - 2) * 8)) & 0xff);//小端法放置
         }
         /* next */
-        rtmp = rtmp->next;
+        rtmp = rtmp -> next;
     }
     return 0;
 }
