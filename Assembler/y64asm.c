@@ -858,11 +858,12 @@ int relocate(void)
  *     0: success
  *     -1: error
  */
-int binfile(FILE *out)
+
+/*int binfile(FILE *out)
 {
-    /* prepare image with y64 binary code */
+    ///* prepare image with y64 binary code 
     
-    /* binary write y64 code to output file (NOTE: see fwrite()) */
+    ///* binary write y64 code to output file (NOTE: see fwrite()) 
     line_t *p;
     if (line_head) {
         p = line_head->next;
@@ -870,6 +871,21 @@ int binfile(FILE *out)
             fwrite(p->y64bin.codes, 1 , p->y64bin.bytes, out);
             p = p->next;
         }
+    }
+    return 0;
+} */
+int binfile(FILE *out)
+{
+    /* prepare image with y64 binary code */
+    line_t *line = line_head;
+    /* binary write y64 code to output file (NOTE: see fwrite()) */
+    while(line){
+        if(line->type == TYPE_INS){
+            if(fseek(out, line->y64bin.addr, SEEK_SET) != 0)
+                return -1;
+            fwrite(line->y64bin.codes, 1, line->y64bin.bytes, out);
+        }
+        line = line->next;
     }
     return 0;
 }
