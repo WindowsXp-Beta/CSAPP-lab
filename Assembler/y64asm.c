@@ -287,7 +287,7 @@ parse_t parse_symbol(char **ptr, char **name)
     if ( IS_END(*ptr) ) {
         return PARSE_ERR;
     }
-    if (*ptr != NULL) {//*ptr and *name is defined
+    if (*ptr != NULL && IS_LETTER(*ptr)) {//*ptr and *name is defined
         char *p = *ptr;//save the first letter
         //we should be really careful about pointer !!!
         int len = 0;
@@ -511,16 +511,14 @@ type_t parse_line(line_t *line)
     }
     /* is a label ? */
     if (parse_label(&point, &name) == PARSE_LABEL) {
-        line -> type = parse_label(&point, &name);
         if( add_symbol(name) == -1){
-            err_print("Dup symbol '%s'", name);
+            err_print("Dup symbol:%s", name);
         } 
         else {
             line->type = TYPE_INS;
             line->y64bin.addr = vmaddr;
             line->y64bin.bytes = 0;
-            return line->type;
-        };
+        }
     }
     /* is an instruction ? */
     //若label后跟着instruction，直接在下面进行处理
@@ -681,15 +679,9 @@ type_t parse_line(line_t *line)
         case I_CALL :
         //jxx Dest / call Dest
         {   
-            parse_t parse_type = parse_data(&point, &symbol, &value);
+            parse_t parse_type = parse_symbol(&point, &symbol);
             if (parse_type == PARSE_ERR) {
                 err_print("Invalid DEST");
-            }
-            else if (parse_type == PARSE_DIGIT) {
-                for (int i = 1; i < 9; i++) {
-                    line->y64bin.codes[i] = ((value >> ((i - 1) * 8)) & 0xff);//小端法放置
-                }
-                return line->type;
             }
             else if (parse_type == PARSE_SYMBOL ) {
                 add_reloc(symbol, &(line -> y64bin));
@@ -737,7 +729,7 @@ type_t parse_line(line_t *line)
             break;
         }
     }
-    }//else return line->type;//type is comment
+    }if (line->type == TYPE_INS) return line->type;
     
     line->type = TYPE_ERR;
     return line->type;
