@@ -285,18 +285,19 @@ parse_t parse_symbol(char **ptr, char **name)
         return PARSE_ERR;
     }
     if (*ptr != NULL) {//*ptr and *name is defined
-        char **p = ptr;
+        char *p = *ptr;//save the first letter
+        //we should be really careful about pointer !!!
         int len = 0;
-        while (!IS_BLANK(*p)) {
-            (*p)++;
+        while (!IS_BLANK(*ptr) && !IS_END(*ptr)) {
+            (*ptr)++;
             len++;
         }
         /* allocate name and copy to it */
         *name = (char *)malloc(sizeof(char) * (len + 1));
         memset(*name, '\0', len + 1);
         /* set 'ptr' and 'name' */
-        strncpy(*name, *ptr, len);
-        *ptr = *p;
+        strncpy(*name, p, len);
+        add_symbol(*name);
         return PARSE_SYMBOL;
     }
     return PARSE_ERR;
@@ -321,13 +322,13 @@ parse_t parse_digit(char **ptr, long *value)
         return PARSE_ERR;
     }
     /* calculate the digit, (NOTE: see strtoll()) */
+    //The hint above is misleading !!! We should use stroull !!!
     //char ** end_of_number = ptr;
-    *value = strtoll(*ptr, ptr, 0);
+    if (!IS_DIGIT(*ptr)) return PARSE_ERR;
+    *value = strtoull(*ptr, ptr, 0);
     /* set 'ptr' and 'value' */
     //ptr and value has been set in strtoll
-    if (*value != 0) return PARSE_DIGIT;
-    //strtoll return 0 if it cannot be exchanged
-    return PARSE_ERR;
+    return PARSE_DIGIT;
 
 }
 
@@ -361,7 +362,7 @@ parse_t parse_imm(char **ptr, char **name, long *value)
         }
     }
     /* if IS_LETTER, then parse the symbol */
-    if ( IS_LETTER(*ptr) ) {
+    else if ( IS_LETTER(*ptr) ) {
         if(parse_symbol(ptr, name) == PARSE_SYMBOL) {
             return PARSE_SYMBOL;
         }
@@ -425,11 +426,11 @@ parse_t parse_data(char **ptr, char **name, long *value)
         if (parse_digit(ptr, value) == PARSE_DIGIT) return PARSE_DIGIT;
     }
     /* if IS_LETTER, then parse the symbol */
-    if (IS_LETTER(*ptr)) {
+    else if (IS_LETTER(*ptr)) {
+        //printf("is letter\n");
         if (parse_symbol(ptr, name) == PARSE_SYMBOL) return PARSE_SYMBOL;
     }
     /* set 'ptr', 'name' and 'value' */
-
     return PARSE_ERR;
 }
 
@@ -454,20 +455,20 @@ parse_t parse_label(char **ptr, char **name)
         return PARSE_ERR;
     }
     if (*ptr != NULL) {
-        char **p = ptr;
+        char *p = *ptr;
         int len = 0;//len代表label的长度
-        while( **p != ':' && !IS_BLANK(*p)) {
-            (*p)++;
+        while( (*p) != ':' && !IS_BLANK(p) && (*p) != '\0') {
+            p++;
             len++;
         }
-        if (IS_BLANK(*p)) return PARSE_ERR;
+        if (IS_BLANK(p) || (*p) == '\0') return PARSE_ERR;
         /* allocate name and copy to it */
         *name = (char *)malloc(sizeof(char) * (len + 1));
         memset(*name, '\0', len + 1);
         /* set 'ptr' and 'name' */
         //name has been set
         strncpy(*name, *ptr, len);//dest, src, n
-        *ptr = *p + 1;
+        *ptr = p + 1;
         return PARSE_LABEL;
     }
     return PARSE_ERR;
@@ -514,6 +515,7 @@ type_t parse_line(line_t *line)
             line->type = TYPE_INS;
             line->y64bin.addr = vmaddr;
             line->y64bin.bytes = 0;
+            return line->type;
         };
     }
     /* is an instruction ? */
@@ -539,7 +541,20 @@ type_t parse_line(line_t *line)
         case I_ALU : 
         //rrmovq %rA, %rB ; Opq %rA, %rB
         {
-            if (parse_reg(&point, &rA) == PARSE_REG && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
+            /*if (parse_reg(&point, &rA) == PARSE_REG && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
+                line->y64bin.codes[1] = HPACK(rA, rB);
+                return line->type;
+            }*/
+            if (parse_reg(&point, &rA) != PARSE_REG) {
+                err_print("Invalid REG");
+            }
+            else if (parse_delim(&point, ',') != PARSE_DELIM) {
+                err_print("Invalid ','");
+            }
+            else if (parse_reg(&point, &rB) != PARSE_REG) {
+                err_print("Invalid REG");
+            }
+            else {
                 line->y64bin.codes[1] = HPACK(rA, rB);
                 return line->type;
             }
@@ -548,7 +563,10 @@ type_t parse_line(line_t *line)
         case I_PUSHQ :
         case I_POPQ ://read rA; rB is None
         {
-            if ( parse_reg(&point, &rA) == PARSE_REG) {
+            if ( parse_reg(&point, &rA) != PARSE_REG) {
+                err_print("Invalid REG");
+            }
+            else {
                 line->y64bin.codes[1] = HPACK(rA, REG_NONE);
                 return line->type;
             }
@@ -558,18 +576,46 @@ type_t parse_line(line_t *line)
         //irmovq imm, rB
         {
             // irmovq $num,%reg
-            if (parse_imm(&point, &symbol, &value) == PARSE_DIGIT && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
+            /*if (parse_imm(&point, &symbol, &value) == PARSE_DIGIT && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
                 line->y64bin.codes[1] = HPACK(REG_NONE, rB);
                 for (int i = 2; i < 10; i++) {
                     line->y64bin.codes[i] = ((value >> ((i - 2) * 8)) & 0xff);//小端法放置
                 }
                 return line->type;
             }
-            else if (parse_imm(&point, &symbol, &value) == PARSE_DIGIT && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
+
+            else if (parse_imm(&point, &symbol, &value) == PARSE_SYMBOL && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
                 line->y64bin.codes[1] = HPACK(REG_NONE, rB);
                 reloc_t * reloc_ins = (reloc_t *)malloc(sizeof(reloc_t));
                 reloc_ins -> next = reltab -> next;
                 reltab -> next = reloc_ins;
+                reloc_ins -> y64bin = &(line -> y64bin);
+                return line->type;
+            }*/
+
+            parse_t parse_type = parse_imm(&point, &symbol, &value);
+            if (parse_type == PARSE_ERR) {
+                err_print("Invalid Immediate");
+            }
+            else if (parse_delim(&point, ',') == PARSE_ERR) {
+                err_print("Invalid ','");
+            }
+            else if (parse_reg(&point, &rB) == PARSE_ERR) {
+                err_print("Invalid REG");
+            }
+            else if (parse_type == PARSE_DIGIT) {
+                line->y64bin.codes[1] = HPACK(REG_NONE, rB);
+                for (int i = 2; i < 10; i++) {
+                    line->y64bin.codes[i] = ((value >> ((i - 2) * 8)) & 0xff);//小端法放置
+                }
+                return line->type;
+            }
+            else if (parse_type == PARSE_SYMBOL) {
+                line->y64bin.codes[1] = HPACK(REG_NONE, rB);
+                reloc_t * reloc_ins = (reloc_t *)malloc(sizeof(reloc_t));
+                reloc_ins -> next = reltab -> next;
+                reltab -> next = reloc_ins;
+                reloc_ins -> name = name;
                 reloc_ins -> y64bin = &(line -> y64bin);
                 return line->type;
             }
@@ -578,7 +624,23 @@ type_t parse_line(line_t *line)
         case I_RMMOVQ :
         //rmmovq rA, D(rB)
         {
-            if (parse_reg(&point, &rA) == PARSE_REG && parse_delim(&point, ',') == PARSE_DELIM && parse_mem(&point, &value, &rB) == PARSE_MEM) {
+            /*if (parse_reg(&point, &rA) == PARSE_REG && parse_delim(&point, ',') == PARSE_DELIM && parse_mem(&point, &value, &rB) == PARSE_MEM) {
+                line->y64bin.codes[1] = HPACK(rA, rB);
+                for (int i = 2; i < 10; i++) {
+                    line->y64bin.codes[i] = ((value >> ((i - 2) * 8)) & 0xff);//小端法放置
+                }
+                return line->type;
+            }*/
+            if (parse_reg(&point, &rA) != PARSE_REG) {
+                err_print("Invalid REG");
+            }
+            else if (parse_delim(&point, ',') != PARSE_DELIM) {
+                err_print("Invalid ','");
+            }
+            else if (parse_mem(&point, &value, &rB) != PARSE_MEM) {
+                err_print("Invalid MEM");
+            }
+            else {
                 line->y64bin.codes[1] = HPACK(rA, rB);
                 for (int i = 2; i < 10; i++) {
                     line->y64bin.codes[i] = ((value >> ((i - 2) * 8)) & 0xff);//小端法放置
@@ -590,7 +652,23 @@ type_t parse_line(line_t *line)
         case I_MRMOVQ : 
         //mrmovq D(rB), rA
         {
-            if (parse_mem(&point, &value, &rB) == PARSE_MEM && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rA) == PARSE_REG) {
+            /*if (parse_mem(&point, &value, &rB) == PARSE_MEM && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rA) == PARSE_REG) {
+                line->y64bin.codes[1] = HPACK(rA, rB);
+                for (int i = 2; i < 10; i++) {
+                    line->y64bin.codes[i] = ((value >> ((i - 2) * 8)) & 0xff);//小端法放置
+                }
+                return line->type;
+            }*/
+            if (parse_mem(&point, &value, &rB) != PARSE_MEM) {
+                err_print("Invalid MEM");
+            }
+            else if (parse_delim(&point, ',') != PARSE_DELIM) {
+                err_print("Invalid ','");
+            }
+            else if (parse_reg(&point, &rA) != PARSE_REG) {
+                err_print("Invalid REG");
+            }
+            else {
                 line->y64bin.codes[1] = HPACK(rA, rB);
                 for (int i = 2; i < 10; i++) {
                     line->y64bin.codes[i] = ((value >> ((i - 2) * 8)) & 0xff);//小端法放置
@@ -603,10 +681,22 @@ type_t parse_line(line_t *line)
         case I_CALL :
         //jxx Dest / call Dest
         {   
-            if (parse_symbol(&point, &symbol) == PARSE_SYMBOL ) {
+            parse_t parse_type = parse_data(&point, &name, &value);
+            //printf("%s\n", name);
+            if (parse_type == PARSE_ERR) {
+                err_print("Invalid DEST");
+            }
+            else if (parse_type == PARSE_DIGIT) {
+                for (int i = 1; i < 9; i++) {
+                    line->y64bin.codes[i] = ((value >> ((i - 1) * 8)) & 0xff);//小端法放置
+                }
+                return line->type;
+            }
+            else if (parse_type == PARSE_SYMBOL ) {
                 reloc_t * reloc_ins = (reloc_t *)malloc(sizeof(reloc_t));
                 reloc_ins -> next = reltab -> next;
                 reltab -> next = reloc_ins;
+                //reloc_ins -> name = name;
                 reloc_ins -> y64bin = &(line -> y64bin);
                 return line->type;
             }
@@ -617,25 +707,29 @@ type_t parse_line(line_t *line)
             switch (LOW(inst->code)) 
             {
                 case D_DATA:{
-                    if (parse_data(&point, &name, &value) == PARSE_DIGIT) {
+                    parse_t parse_type = parse_data(&point, &name, &value);
+                    if (parse_type == PARSE_DIGIT) {
                         for (int i = 0; i < 8; i++) {
                             line->y64bin.codes[i] = ((value >> (i * 8)) & 0xff);
                         }
                         return line->type;
                     }
-                    if (parse_data(&point, &name, &value) == PARSE_SYMBOL) {
+                    else if (parse_type == PARSE_SYMBOL) {
                         reloc_t * reloc_ins = (reloc_t *)malloc(sizeof(reloc_t));
                         reloc_ins -> next = reltab -> next;
                         reltab -> next = reloc_ins;
+                        reloc_ins -> name = name;
                         reloc_ins -> y64bin = &(line -> y64bin);
                         return line->type;                    
                     }
+                    break;
                 }
                 case D_ALIGN : {
                     if (parse_digit(&point, &value) == PARSE_DIGIT) {
-                        vmaddr = (vmaddr / value) * value +value;
+                        vmaddr = (vmaddr / value) * value + value;
                         line->y64bin.addr = vmaddr;
                         line->y64bin.codes[0] = '\0';
+                        return line->type;
                     }
                     break;
                 }
@@ -644,13 +738,15 @@ type_t parse_line(line_t *line)
                         vmaddr = value;
                         line->y64bin.addr = vmaddr;
                         line->y64bin.codes[0] = '\0';
+                        return line->type;
                     }
+                    break;
                 }
             }
             break;
         }
     }
-    }else return line->type;//type is comment
+    }//else return line->type;//type is comment
     
     line->type = TYPE_ERR;
     return line->type;
@@ -730,7 +826,11 @@ int relocate(void)
     while (rtmp) {
         /* find symbol */
         symbol_t *s = find_symbol(rtmp->name);
-        if (!s) return -1;
+        if (!s) {
+            //printf("%s\n", rtmp->name);
+            err_print("Unknown symbol:'%s'", rtmp->name);
+            return -1;
+        }
         /* relocate y64bin according itype */
         long dest = s->addr;
         for (int i = 2; i < 10; i++) {
