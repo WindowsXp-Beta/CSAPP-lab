@@ -291,7 +291,7 @@ parse_t parse_symbol(char **ptr, char **name)
         char *p = *ptr;//save the first letter
         //we should be really careful about pointer !!!
         int len = 0;
-        while (!IS_BLANK(*ptr) && !IS_END(*ptr)) {
+        while (IS_LETTER(*ptr) && !IS_BLANK(*ptr) && !IS_END(*ptr)) {
             (*ptr)++;
             len++;
         }
@@ -358,17 +358,17 @@ parse_t parse_imm(char **ptr, char **name, long *value)
         return PARSE_ERR;
     }
     /* if IS_IMM, then parse the digit */
-    if ( parse_delim(ptr, '$') == PARSE_DELIM ) {
+    if ( IS_LETTER(*ptr) ) {
+        if(parse_symbol(ptr, name) == PARSE_SYMBOL) {
+            return PARSE_SYMBOL;
+        }
+    } 
+    else if ( parse_delim(ptr, '$') == PARSE_DELIM ) {
         if ( parse_digit(ptr, value) == PARSE_DIGIT ) {
             return PARSE_DIGIT;
         }
     }
     /* if IS_LETTER, then parse the symbol */
-    else if ( IS_LETTER(*ptr) ) {
-        if(parse_symbol(ptr, name) == PARSE_SYMBOL) {
-            return PARSE_SYMBOL;
-        }
-    }
     /* set 'ptr' and 'name' or 'value' */
     return PARSE_ERR;
 }
@@ -499,18 +499,22 @@ type_t parse_line(line_t *line)
     char *symbol;//name for symbol
     regid_t rA, rB;
     long value;
+    bool_t flag = FALSE;//a hopeless flag \cry
     /* skip blank and check IS_END */
     SKIP_BLANK(point);
     if (IS_END(point)){ //this line is blank
         return line->type;
     }
+    //printf("%c\n", *point);
     /* is a comment ? */
-    if (IS_COMMENT(line->y64asm)) {
+    if (IS_COMMENT(point)) {
+        //printf("a comment\n");
         line->type = TYPE_COMM;
         return line->type;
     }
     /* is a label ? */
     if (parse_label(&point, &name) == PARSE_LABEL) {
+        //printf("a label\n");
         if( add_symbol(name) == -1){
             err_print("Dup symbol:%s", name);
         } 
@@ -518,6 +522,7 @@ type_t parse_line(line_t *line)
             line->type = TYPE_INS;
             line->y64bin.addr = vmaddr;
             line->y64bin.bytes = 0;
+            flag = TRUE;
         }
     }
     /* is an instruction ? */
@@ -600,6 +605,7 @@ type_t parse_line(line_t *line)
                 err_print("Invalid Immediate");
             }
             else if (parse_delim(&point, ',') == PARSE_ERR) {
+                printf("line number is %d\n", lineno);
                 err_print("Invalid ','");
             }
             else if (parse_reg(&point, &rB) == PARSE_ERR) {
@@ -661,6 +667,7 @@ type_t parse_line(line_t *line)
                 err_print("Invalid MEM");
             }
             else if (parse_delim(&point, ',') != PARSE_DELIM) {
+                printf("The line number is %d", lineno);
                 err_print("Invalid ','");
             }
             else if (parse_reg(&point, &rA) != PARSE_REG) {
@@ -729,7 +736,7 @@ type_t parse_line(line_t *line)
             break;
         }
     }
-    }if (line->type == TYPE_INS) return line->type;
+    }if (flag) return line->type;
     
     line->type = TYPE_ERR;
     return line->type;
