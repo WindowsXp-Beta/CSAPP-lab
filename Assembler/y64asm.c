@@ -291,7 +291,7 @@ parse_t parse_symbol(char **ptr, char **name)
         char *p = *ptr;//save the first letter
         //we should be really careful about pointer !!!
         int len = 0;
-        while (IS_LETTER(*ptr) && !IS_BLANK(*ptr) && !IS_END(*ptr)) {
+        while ((IS_LETTER(*ptr) || IS_DIGIT(*ptr)) && !IS_BLANK(*ptr) && !IS_END(*ptr)) {
             (*ptr)++;
             len++;
         }
@@ -716,7 +716,7 @@ type_t parse_line(line_t *line)
                 }
                 case D_ALIGN : {
                     if (parse_digit(&point, &value) == PARSE_DIGIT) {
-                        vmaddr = (vmaddr / value) * value + value;
+                        if(vmaddr != 0) vmaddr = (vmaddr / value) * value + value;
                         line->y64bin.addr = vmaddr;
                         line->y64bin.codes[0] = '\0';
                         return line->type;
@@ -822,8 +822,26 @@ int relocate(void)
         }
         /* relocate y64bin according itype */
         long dest = s->addr;
-        for (int i = 2; i < 10; i++) {
-            rtmp->y64bin->codes[i] = ((dest >> ((i - 2) * 8)) & 0xff);//小端法放置
+        switch (HIGH(rtmp->y64bin->codes[0]))
+        {
+        case I_CALL:
+        case I_JMP:{
+            for (int i = 1; i < 9; i++) {
+                rtmp->y64bin->codes[i] = ((dest >> ((i - 1) * 8)) & 0xff);//小端法放置
+            }
+            break;
+        }
+        case I_DIRECTIVE:{
+            for (int i = 0; i < 8; i++) {
+                rtmp->y64bin->codes[i] = ((dest >> (i * 8)) & 0xff);//小端法放置
+            }
+            break;
+        }
+        default:
+            for (int i = 2; i < 10; i++) {
+                rtmp->y64bin->codes[i] = ((dest >> ((i - 2) * 8)) & 0xff);//小端法放置
+            }
+            break;
         }
         /* next */
         rtmp = rtmp -> next;
@@ -849,7 +867,7 @@ int binfile(FILE *out)
     if (line_head) {
         p = line_head->next;
         while (p) {
-            fwrite(p->y64bin.codes, p->y64bin.bytes, 1, out);
+            fwrite(p->y64bin.codes, 1 , p->y64bin.bytes, out);
             p = p->next;
         }
     }
