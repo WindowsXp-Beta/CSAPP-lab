@@ -53,3 +53,7 @@ typedef struct reloc {
 `comment`没有二进制码，不用在`bin`文件中体现，因此一行的默认形式就是comment。
 
 `label`和`symbol`的区别：symbol是ins中出现的label，比如`call main`,`jmp Loop`。
+
+some hints
+1. 可以使用`./y64asm -v filename`然后再y64asm中写`printf`调试。
+2. 一些debug中碰到的问题在`y64asm.c`中的注释中。

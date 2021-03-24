@@ -514,7 +514,6 @@ type_t parse_line(line_t *line)
     }
     /* is a label ? */
     if (parse_label(&point, &name) == PARSE_LABEL) {
-        //printf("a label\n");
         if( add_symbol(name) == -1){
             err_print("Dup symbol:%s", name);
         } 
@@ -583,23 +582,6 @@ type_t parse_line(line_t *line)
         //irmovq imm, rB
         {
             // irmovq $num,%reg
-            /*if (parse_imm(&point, &symbol, &value) == PARSE_DIGIT && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
-                line->y64bin.codes[1] = HPACK(REG_NONE, rB);
-                for (int i = 2; i < 10; i++) {
-                    line->y64bin.codes[i] = ((value >> ((i - 2) * 8)) & 0xff);//小端法放置
-                }
-                return line->type;
-            }
-
-            else if (parse_imm(&point, &symbol, &value) == PARSE_SYMBOL && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rB) == PARSE_REG) {
-                line->y64bin.codes[1] = HPACK(REG_NONE, rB);
-                reloc_t * reloc_ins = (reloc_t *)malloc(sizeof(reloc_t));
-                reloc_ins -> next = reltab -> next;
-                reltab -> next = reloc_ins;
-                reloc_ins -> y64bin = &(line -> y64bin);
-                return line->type;
-            }*/
-
             parse_t parse_type = parse_imm(&point, &symbol, &value);
             if (parse_type == PARSE_ERR) {
                 err_print("Invalid Immediate");
@@ -628,13 +610,6 @@ type_t parse_line(line_t *line)
         case I_RMMOVQ :
         //rmmovq rA, D(rB)
         {
-            /*if (parse_reg(&point, &rA) == PARSE_REG && parse_delim(&point, ',') == PARSE_DELIM && parse_mem(&point, &value, &rB) == PARSE_MEM) {
-                line->y64bin.codes[1] = HPACK(rA, rB);
-                for (int i = 2; i < 10; i++) {
-                    line->y64bin.codes[i] = ((value >> ((i - 2) * 8)) & 0xff);//小端法放置
-                }
-                return line->type;
-            }*/
             if (parse_reg(&point, &rA) != PARSE_REG) {
                 err_print("Invalid REG");
             }
@@ -656,18 +631,10 @@ type_t parse_line(line_t *line)
         case I_MRMOVQ : 
         //mrmovq D(rB), rA
         {
-            /*if (parse_mem(&point, &value, &rB) == PARSE_MEM && parse_delim(&point, ',') == PARSE_DELIM && parse_reg(&point, &rA) == PARSE_REG) {
-                line->y64bin.codes[1] = HPACK(rA, rB);
-                for (int i = 2; i < 10; i++) {
-                    line->y64bin.codes[i] = ((value >> ((i - 2) * 8)) & 0xff);//小端法放置
-                }
-                return line->type;
-            }*/
             if (parse_mem(&point, &value, &rB) != PARSE_MEM) {
                 err_print("Invalid MEM");
             }
             else if (parse_delim(&point, ',') != PARSE_DELIM) {
-                printf("The line number is %d", lineno);
                 err_print("Invalid ','");
             }
             else if (parse_reg(&point, &rA) != PARSE_REG) {
@@ -859,21 +826,6 @@ int relocate(void)
  *     -1: error
  */
 
-/*int binfile(FILE *out)
-{
-    ///* prepare image with y64 binary code 
-    
-    ///* binary write y64 code to output file (NOTE: see fwrite()) 
-    line_t *p;
-    if (line_head) {
-        p = line_head->next;
-        while (p) {
-            fwrite(p->y64bin.codes, 1 , p->y64bin.bytes, out);
-            p = p->next;
-        }
-    }
-    return 0;
-} */
 int binfile(FILE *out)
 {
     /* prepare image with y64 binary code */
@@ -882,6 +834,7 @@ int binfile(FILE *out)
     while(line){
         if(line->type == TYPE_INS){
             if(fseek(out, line->y64bin.addr, SEEK_SET) != 0)
+            //这里要设置fseek的偏移，因为.pos和.align的存在，二进制码在内存中不是连续的
                 return -1;
             fwrite(line->y64bin.codes, 1, line->y64bin.bytes, out);
         }
