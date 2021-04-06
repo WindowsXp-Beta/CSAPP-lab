@@ -1,0 +1,48 @@
+# author: Wei Xinpeng
+# student ID: 519021910888
+
+# Execution begin at address 0
+    .pos 0
+    irmovq stack, %rsp
+    call main
+    halt
+
+    .align 8
+# Source block
+src:
+    .quad 0x00a
+    .quad 0x0b0
+    .quad 0xc00
+# Destination block
+dest:
+    .quad 0x111
+    .quad 0x222
+    .quad 0x333
+
+main:
+    irmovq src, %rdi
+    irmovq dest, %rsi
+    irmovq 3, %rdx
+    call copy_block
+    ret
+
+copy_block:
+    xorq %rax, %rax # result = 0
+    jmp test
+loop:
+    mrmovq (%rdi), %r8 # val = *src
+    irmovq 8, %r9 # r9 = 8
+    addq %r9, %rdi # src++
+    rmmovq %r8, (%rsi) # *dest = val
+    addq %r9, %rsi # dest++
+    xorq %r8, %rax # result = result ^ val
+    irmovq 1, %r10 
+    subq %r10, %rdx # len--
+test:
+    andq %rdx, %rdx
+    jne loop
+    ret
+
+# Stack starts here and grows to lower address
+    .pos 0x200
+stack:

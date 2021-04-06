@@ -13,7 +13,7 @@ typedef struct ELE {
 } *list_ptr;
 
 /* sum_list - Sum the elements of a linked list */
-long sum_list(list_ptr ls)
+long sum_list(list_ptr ls)//ls 是指向ELE的指针
 {
     long val = 0;
     while (ls) {
