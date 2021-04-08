@@ -5,7 +5,8 @@
 # 1. Use iaddq.
 # 2. Use loop unrolling (copy 10 elements in each cycle)
 # 3. Use loop unrolling (copy 2 elements in each cycle) to handle the remain elements.
-# score: 
+# score: 41/60
+
 #/* $begin ncopy-ys */
 ##################################################################
 # ncopy.ys - Copy a src block of len words to dst.
@@ -39,17 +40,6 @@ Loop:
 	mrmovq 56(%rdi), %rcx # read val from src + 7
 	mrmovq 64(%rdi), %rbx # read val from src + 8
 	mrmovq 72(%rdi), %rbp # read val from src + 9
-
-	rmmovq %r8, (%rsi)	# store it to dst
-	rmmovq %r9, 8(%rsi) # store it to dst + 1
-	rmmovq %r10, 16(%rsi) # store it to dst + 2
-	rmmovq %r11, 24(%rsi) # store it to dst + 3	
-	rmmovq %r12, 32(%rsi) # store it to dst + 4
-	rmmovq %r13, 40(%rsi) # store it to dst + 5
-	rmmovq %r14, 48(%rsi) # store it to dst + 6
-	rmmovq %rcx, 56(%rsi) # store it to dst + 7	
-	rmmovq %rbx, 64(%rsi) # store it to dst + 8
-	rmmovq %rbp, 72(%rsi) # store it to dst + 9
 
 	andq %r8, %r8		# val <= 0?
 	jle Check1		# if so, goto check next val s:
@@ -93,11 +83,21 @@ Check9:
 	iaddq $1, %rax
 
 Npos:
+	rmmovq %r8, (%rsi)	# store it to dst
+	rmmovq %r9, 8(%rsi) # store it to dst + 1
+	rmmovq %r10, 16(%rsi) # store it to dst + 2
+	rmmovq %r11, 24(%rsi) # store it to dst + 3	
+	rmmovq %r12, 32(%rsi) # store it to dst + 4
+	rmmovq %r13, 40(%rsi) # store it to dst + 5
+	rmmovq %r14, 48(%rsi) # store it to dst + 6
+	rmmovq %rcx, 56(%rsi) # store it to dst + 7	
+	rmmovq %rbx, 64(%rsi) # store it to dst + 8
+	rmmovq %rbp, 72(%rsi) # store it to dst + 9
+
 	iaddq $80, %rdi		# src++
 	iaddq $80, %rsi		# dst++
 	iaddq $-10, %rdx		# len-=10
 	jge Loop # if rdx >= 10 goto Loop
-	jmp Hand_less_10 # if rdx < 10 
 
 # CheckLoop:
 # 	rrmovq %rdx, %r14	# store len in r14
@@ -107,11 +107,13 @@ Npos:
 
 Hand_less_10:
 	iaddq $8, %rdx
+	jge Handle_last
 	jl Handle_less_2 # if rdx < 2
 	
 Handle_last:
 	mrmovq (%rdi), %r8	# read val from src
 	mrmovq 8(%rdi), %r9
+
 	rmmovq %r8, (%rsi)	# store it to dst
 	rmmovq %r9, 8(%rsi)
 	
