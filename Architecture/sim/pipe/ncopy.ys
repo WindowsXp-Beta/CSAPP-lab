@@ -1,3 +1,11 @@
+# author: Wei Xinpeng
+# student ID: 519021910888
+# What I modified:
+# First try: 
+# 1. Use iaddq.
+# 2. Use loop unrolling (copy 10 elements in each cycle)
+# 3. Use loop unrolling (copy 2 elements in each cycle) to handle the remain elements.
+# score: 
 #/* $begin ncopy-ys */
 ##################################################################
 # ncopy.ys - Copy a src block of len words to dst.
@@ -17,22 +25,114 @@ ncopy:
 # You can modify this portion
 	# Loop header
 	xorq %rax,%rax		# count = 0;
-	andq %rdx,%rdx		# len <= 0?
-	jle Done		# if so, goto Done:
+	# andq %rdx,%rdx		# len <= 0?
+	# jle Done		# if so, goto Done:
+	jmp CheckLoop
 
-Loop:	mrmovq (%rdi), %r10	# read val from src...
-	rmmovq %r10, (%rsi)	# ...and store it to dst
-	andq %r10, %r10		# val <= 0?
-	jle Npos		# if so, goto Npos:
-	irmovq $1, %r10
-	addq %r10, %rax		# count++
-Npos:	irmovq $1, %r10
-	subq %r10, %rdx		# len--
-	irmovq $8, %r10
-	addq %r10, %rdi		# src++
-	addq %r10, %rsi		# dst++
-	andq %rdx,%rdx		# len > 0?
-	jg Loop			# if so, goto Loop:
+Loop:
+	mrmovq (%rdi), %r8	# read val from src
+	mrmovq 8(%rdi), %r9 # read val from src + 1
+	mrmovq 16(%rdi), %r10 # read val from src + 2
+	mrmovq 24(%rdi), %r11 # read val from src + 3
+	mrmovq 32(%rdi), %r12 # read val from src + 4
+	mrmovq 40(%rdi), %r13 # read val from src + 5
+	mrmovq 48(%rdi), %r14 # read val from src + 6
+	mrmovq 56(%rdi), %rcx # read val from src + 7
+	mrmovq 64(%rdi), %rbx # read val from src + 8
+	mrmovq 72(%rdi), %rbp # read val from src + 9
+
+	rmmovq %r8, (%rsi)	# store it to dst
+	rmmovq %r9, 8(%rsi) # store it to dst + 1
+	rmmovq %r10, 16(%rsi) # store it to dst + 2
+	rmmovq %r11, 24(%rsi) # store it to dst + 3	
+	rmmovq %r12, 32(%rsi) # store it to dst + 4
+	rmmovq %r13, 40(%rsi) # store it to dst + 5
+	rmmovq %r14, 48(%rsi) # store it to dst + 6
+	rmmovq %rcx, 56(%rsi) # store it to dst + 7	
+	rmmovq %rbx, 64(%rsi) # store it to dst + 8
+	rmmovq %rbp, 72(%rsi) # store it to dst + 9
+
+	andq %r8, %r8		# val <= 0?
+	jle Check1		# if so, goto check next val s:
+	iaddq $1, %rax		# count++
+
+Check1:
+	andq %r9, %r9
+	jle Check2
+	iaddq $1, %rax		# count++
+Check2:
+	andq %r10, %r10
+	jle Check3
+	iaddq $1, %rax
+Check3:
+	andq %r11, %r11
+	jle Check4
+	iaddq $1, %rax
+Check4:
+	andq %r12, %r12
+	jle Check5
+	iaddq $1, %rax
+Check5:
+	andq %r13, %r13
+	jle Check6
+	iaddq $1, %rax
+Check6:
+	andq %r14, %r14
+	jle Check7
+	iaddq $1, %rax
+Check7:
+	andq %rcx, %rcx
+	jle Check8
+	iaddq $1, %rax
+Check8:
+	andq %rbx, %rbx
+	jle Check9
+	iaddq $1, %rax
+Check9:
+	andq %rbp, %rbp
+	jle Npos
+	iaddq $1, %rax
+
+Npos:
+	iaddq $80, %rdi		# src++
+	iaddq $80, %rsi		# dst++
+	iaddq $-10, %rdx		# len-=2
+
+CheckLoop:
+	rrmovq %rdx, %r14	# store len in r14
+	iaddq $-9, %r14		# len > 9?
+	jg Loop		# if len > 9, goto Loop:
+	jmp CheckLoop2
+
+
+Handle_last:
+	mrmovq (%rdi), %r8	# read val from src
+	mrmovq 8(%rdi), %r9
+	rmmovq %r8, (%rsi)	# store it to dst
+	rmmovq %r9, 8(%rsi)
+	iaddq $16, %rdi
+	iaddq $16, %rsi
+	iaddq $-2, %rdx 
+	andq %r8, %r8
+	jle Check10
+	iaddq $1, %rax
+Check10:
+	andq %r9, %r9
+	jle CheckLoop2
+	iaddq $1, %rax
+
+CheckLoop2:
+	rrmovq %rdx, %r14
+	iaddq $-1, %r14 # len > 1?
+	jg Handle_last
+	jne Done # len != 1 means len = 0
+
+	mrmovq (%rdi), %r8	# read val from src	
+	rmmovq %r8, (%rsi)	# store it to dst
+	andq %r8, %r8
+	jle Done
+	iaddq $1, %rax
+
 ##################################################################
 # Do not modify the following section of code
 # Function epilogue.

@@ -1,3 +1,23 @@
+# author: Wei Xinpeng
+# student ID: 519021910888
+
+# What I modified: implement the iaddq instruction
+# The implementation of IADDQ
+# Fetch:
+# 	icode:ifun <- M[PC]
+# 	rA:rB <- M[PC + 1]
+# 	valC <- M[PC + 2]
+# 	valP <- valP + 10
+# Decode:
+# 	valB <- R[rB]
+# Execute:
+#	valE <- valB + valC
+# Write back:
+# 	R[rB] <- valE
+# Memory:
+# Update PC:
+# 	PC <- valP 
+
 #/* $begin pipe-all-hcl */
 ####################################################################
 #    HCL Description of Control for Pipelined Y86-64 Processor     #

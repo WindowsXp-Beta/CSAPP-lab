@@ -1,6 +1,21 @@
 # author: Wei xinpeng
 # student ID: 519021910888
 
+# Fetch:
+# 	icode:ifun <- M[PC]
+# 	rA:rB <- M[PC + 1]
+# 	valC <- M[PC + 2]
+# 	valP <- valP + 10
+# Decode:
+# 	valB <- R[rB]
+# Execute:
+#	valE <- valB + valC
+# Write back:
+# 	R[rB] <- valE
+# Memory:
+# Update PC:
+# 	PC <- valP 
+
 #/* $begin seq-all-hcl */
 ####################################################################
 #  HCL Description of Control for Single Cycle Y86-64 Processor SEQ   #
