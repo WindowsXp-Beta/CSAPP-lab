@@ -24,10 +24,9 @@ ncopy:
 ##################################################################
 # You can modify this portion
 	# Loop header
-	xorq %rax,%rax		# count = 0;
-	# andq %rdx,%rdx		# len <= 0?
-	# jle Done		# if so, goto Done:
-	jmp CheckLoop
+	xorq %rax, %rax		# count = 0;
+	iaddq $-10, %rdx
+	jl Hand_less_10 # if rdx < 10
 
 Loop:
 	mrmovq (%rdi), %r8	# read val from src
@@ -96,37 +95,45 @@ Check9:
 Npos:
 	iaddq $80, %rdi		# src++
 	iaddq $80, %rsi		# dst++
-	iaddq $-10, %rdx		# len-=2
+	iaddq $-10, %rdx		# len-=10
+	jge Loop # if rdx >= 10 goto Loop
+	jmp Hand_less_10 # if rdx < 10 
 
-CheckLoop:
-	rrmovq %rdx, %r14	# store len in r14
-	iaddq $-9, %r14		# len > 9?
-	jg Loop		# if len > 9, goto Loop:
-	jmp CheckLoop2
+# CheckLoop:
+# 	rrmovq %rdx, %r14	# store len in r14
+# 	iaddq $-9, %r14		# len > 9?
+# 	jg Loop		# if len > 9, goto Loop:
+# 	jmp CheckLoop2
 
-
+Hand_less_10:
+	iaddq $8, %rdx
+	jl Handle_less_2 # if rdx < 2
+	
 Handle_last:
 	mrmovq (%rdi), %r8	# read val from src
 	mrmovq 8(%rdi), %r9
 	rmmovq %r8, (%rsi)	# store it to dst
 	rmmovq %r9, 8(%rsi)
-	iaddq $16, %rdi
-	iaddq $16, %rsi
-	iaddq $-2, %rdx 
+	
 	andq %r8, %r8
 	jle Check10
 	iaddq $1, %rax
 Check10:
 	andq %r9, %r9
-	jle CheckLoop2
+	jle Nops2
 	iaddq $1, %rax
 
-CheckLoop2:
-	rrmovq %rdx, %r14
-	iaddq $-1, %r14 # len > 1?
-	jg Handle_last
-	jne Done # len != 1 means len = 0
+Nops2:
+	iaddq $16, %rdi
+	iaddq $16, %rsi
+	iaddq $-2, %rdx 
+	jge Handle_last # if rdx >= 2
+	
+Handle_less_2:
+	iaddq $1, %rdx
+	jl Done # if rdx = 0
 
+Handle_last_one:
 	mrmovq (%rdi), %r8	# read val from src	
 	rmmovq %r8, (%rsi)	# store it to dst
 	andq %r8, %r8
