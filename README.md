@@ -4,7 +4,7 @@
 > A big reason I build this repo is to use github to exchange codes between my PC and my virtual machine.
 
 ## SVN tutorial
-- `svn co svn://ipads.se.sjtu.edu.cn/ics-se19/ics519021910888 icslabs --username=ics519021910888`
+- `svn co svn://ipads.se.sjtu.edu.cn/ics-se19/ics519021910888/labx file_name_in_your_PC --username=ics519021910888`
 
 co: checkout get the file(path is the set by the url) from svn server into your local directory `icslabs`
 
