@@ -2,6 +2,8 @@
  * tsh - A tiny shell program with job control
  * 
  * <Put your name and ID here>
+ * Author: Wei xinpeng
+ * student ID: 519021910888
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -147,7 +149,7 @@ int main(int argc, char **argv)
 	eval(cmdline);
 	fflush(stdout);
 	fflush(stdout);
-    } 
+    }
 
     exit(0); /* control never reaches here */
 }
@@ -163,8 +165,62 @@ int main(int argc, char **argv)
  * background children don't receive SIGINT (SIGTSTP) from the kernel
  * when we type ctrl-c (ctrl-z) at the keyboard.  
 */
-void eval(char *cmdline) 
+void eval(char *cmdline) //about 70 lines
 {
+    char *argv[MAXARGS];
+    int bg;//should the job run in bg or fg
+    pid_t pid;
+    sigset_t mask_all, mask_one, prev_one;
+
+    if (sigfillset(&mask_all) < 0) {
+        unix_error("Sigfillset error");
+    }
+    if (sigemptyset(&mask_one) < 0) {
+        unix_error("Sigemptyset error");
+    }
+    if (sigaddset(&mask_one, SIGCHLD) < 0) {
+        unix_error("Sigaddset error");
+    }
+
+    bg = parseline(cmdline, argv);
+    if (argv[0] == NULL) return;
+    if (sigprocmask(SIG_BLOCK, &mask_one, &prev_one) < 0) {
+        unix_error("Sigprocmask error");    
+    }
+    if (!builtin_cmd(argv)) {
+        if ((pid = fork()) == 0) { //run in child process
+            if (sigprocmask(SIG_SETMASK, &prev_one, NULL) < 0) {
+                unix_error("Sigprocmask error");
+            }
+            setpgid(0, 0);//The reason of this line is in the last page of lab7.pdf.
+            if (!execve(argv[0], argv, environ)) {
+                printf("%s: Command not found.\n", argv[0]);
+                exit(0);
+            }
+        }
+        
+        if (!bg) {
+            if (sigprocmask(SIG_BLOCK, &mask_all, NULL) < 0) {
+                unix_error("Sigprocmask error");
+            }
+            addjob(jobs, pid, FG, cmdline);
+            if (sigprocmask(SIG_SETMASK, &prev_one, NULL) < 0) {
+                unix_error("Sigprocmask error");
+            }
+            waitfg(pid);
+        }
+        else {
+            if (sigprocmask(SIG_BLOCK, &mask_all, NULL) < 0) {
+                unix_error("Sigprocmask error");
+            }
+            addjob(jobs, pid, BG, cmdline);
+            if (sigprocmask(SIG_SETMASK, &prev_one, NULL) < 0) {
+                unix_error("Sigprocmask error");
+            }
+            struct job_t * bg_job = getjobpid(jobs, pid);
+            printf("[%d] (%d) %s",bg_job -> jid ,bg_job -> pid, cmdline);
+        }
+    }
     return;
 }
 
@@ -175,7 +231,7 @@ void eval(char *cmdline)
  * argument.  Return true if the user has requested a BG job, false if
  * the user has requested a FG job.  
  */
-int parseline(const char *cmdline, char **argv) 
+int parseline(const char *cmdline, char **argv)
 {
     static char array[MAXLINE]; /* holds local copy of command line */
     char *buf = array;          /* ptr that traverses command line */
@@ -190,7 +246,7 @@ int parseline(const char *cmdline, char **argv)
 
     /* Build the argv list */
     argc = 0;
-    if (*buf == '\'') {
+    if (*buf == '\'') { //back slash means escape
 	buf++;
 	delim = strchr(buf, '\'');
     }
@@ -199,8 +255,8 @@ int parseline(const char *cmdline, char **argv)
     }
 
     while (delim) {
-	argv[argc++] = buf;
-	*delim = '\0';
+	argv[argc++] = buf;//第一个参数（一个字符串）的首地址
+	*delim = '\0';//让这个参数字符串有结尾，将space或quote替换成\0
 	buf = delim + 1;
 	while (*buf && (*buf == ' ')) /* ignore spaces */
 	       buf++;
@@ -227,17 +283,45 @@ int parseline(const char *cmdline, char **argv)
 
 /* 
  * builtin_cmd - If the user has typed a built-in command then execute
- *    it immediately.  
+ *    it immediately.
+ * tsh should support following built-in commands:
+ * 1. The quit command terminates the shell.
+ * 2. The jobs command lists all background jobs.
+ * 3. The bg <job> command restarts <job> by sending it a SIGCONT signal, and then runs it in the background. The <job> argument can be either a PID or a JID.
+ * 4. The fg <job> command restarts <job> by sending it a SIGCONT signal, and then runs it in the foreground. The <job> argument can be either a PID or a JID.
  */
-int builtin_cmd(char **argv) 
+int builtin_cmd(char **argv) //about 25 lines
 {
+    if (!strcmp(argv[0], "quit")) {
+        exit(0);
+    }
+    else if (!strcmp(argv[0], "jobs")) {
+        sig_t mask_all, prev_all;
+        if (sigfillset(&mask_all) < 0) {
+            unix_error("Sigfillset error");
+        }
+        if (sigprocmask(SIG_BLOCK, &mask_all, &prev_all)) {
+            unix_error("Sigprocmask error");
+        }
+        listjobs(jobs);
+        if (sigprocmask(SIG_SETMASK, &prev_all, NULL) < 0) {
+            unix_error("Sigprocmask error");
+        }
+        return 1;
+    }
+    else if (!strcmp(argv[0], "bg")) {
+
+    }
+    else if (!strcmp(argv[0], "fg")) {
+
+    }
     return 0;     /* not a builtin command */
 }
 
 /* 
  * do_bgfg - Execute the builtin bg and fg commands
  */
-void do_bgfg(char **argv) 
+void do_bgfg(char **argv) //about 50 lines
 {
     return;
 }
@@ -245,8 +329,11 @@ void do_bgfg(char **argv)
 /* 
  * waitfg - Block until process pid is no longer the foreground process
  */
-void waitfg(pid_t pid)
+void waitfg(pid_t pid) //about 20 lines
 {
+    while (getjobpid(jobs, pid)) {
+       sleep(1);
+    }
     return;
 }
 
@@ -263,16 +350,54 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig) 
 {
+    int olderrno = errno;
+    sigset_t mask_all, prev_all;
+    pid_t pid;
+    sigfillset(&mask_all);
+    while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
+
+        if (sigprocmask(SIG_BLOCK, &mask_all, &prev_all) < 0) {
+            unix_error("Sigprocmask error");
+        }
+        deletejob(jobs, pid);
+        if (sigprocmask(SIG_SETMASK, &prev_all, NULL) < 0) {
+            unix_error("Sigprocmask error");
+        }
+    }
+    if (errno != ECHILD) {
+        
+    }
+    errno = olderrno;
     return;
 }
 
 /* 
  * sigint_handler - The kernel sends a SIGINT to the shell whenver the
  *    user types ctrl-c at the keyboard.  Catch it and send it along
- *    to the foreground job.  
+ *    to the foreground job.
  */
 void sigint_handler(int sig) 
 {
+    int olderrno = errno;
+    sigset_t mask_all, prev_all;
+
+    if (sigfillset(&mask_all) < 0) {
+        unix_error("Sigfillset error");
+    }
+    if (sigprocmask(SIG_BLOCK, &mask_all, &prev_all) < 0) {
+        unix_error("Sigprocmask error");
+    }
+    int fg_pid = fgpid(jobs);
+    if (sigprocmask(SIG_SETMASK, &prev_all, NULL) < 0) {
+        unix_error("Sigprocmask error");
+    }
+    if (fg_pid) {//if there is no foreboard jobs
+        if (kill(-fg_pid, 2) < 0) {
+            unix_error("Kill error");
+        }
+    }
+
+    errno = olderrno;
     return;
 }
 
@@ -354,11 +479,10 @@ int deletejob(struct job_t *jobs, pid_t pid)
 
     if (pid < 1)
 	return 0;
-
     for (i = 0; i < MAXJOBS; i++) {
 	if (jobs[i].pid == pid) {
 	    clearjob(&jobs[i]);
-	    nextjid = maxjid(jobs)+1;
+	    nextjid = maxjid(jobs)+1;//如果被删除的是当前最大的JID，那么下一个插入便会占用这个JID
 	    return 1;
 	}
     }
