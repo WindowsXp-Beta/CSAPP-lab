@@ -86,7 +86,12 @@ void unix_error(char *msg);
 void app_error(char *msg);
 typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
-
+int Fork(void);
+void Kill(int, int);
+void Sigfillset(sigset_t *);
+void Sigemptyset(sigset_t *);
+void Sigaddset(sigset_t *, int);
+void Sigprocmask(int ,sigset_t *, sigset_t *);
 /*
  * main - The shell's main routine 
  */
@@ -172,51 +177,34 @@ void eval(char *cmdline) //about 70 lines
     pid_t pid;
     sigset_t mask_all, mask_one, prev_one;
 
-    if (sigfillset(&mask_all) < 0) {
-        unix_error("Sigfillset error");
-    }
-    if (sigemptyset(&mask_one) < 0) {
-        unix_error("Sigemptyset error");
-    }
-    if (sigaddset(&mask_one, SIGCHLD) < 0) {
-        unix_error("Sigaddset error");
-    }
+    Sigfillset(&mask_all);
+    Sigemptyset(&mask_one);
+    Sigaddset(&mask_one, SIGCHLD);
 
     bg = parseline(cmdline, argv);
     if (argv[0] == NULL) return;
-    if (sigprocmask(SIG_BLOCK, &mask_one, &prev_one) < 0) {
-        unix_error("Sigprocmask error");    
-    }
+    Sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
     if (!builtin_cmd(argv)) {
-        if ((pid = fork()) == 0) { //run in child process
-            if (sigprocmask(SIG_SETMASK, &prev_one, NULL) < 0) {
-                unix_error("Sigprocmask error");
-            }
+        if ((pid = Fork()) == 0) { //run in child process
+            Sigprocmask(SIG_SETMASK, &prev_one, NULL);
             setpgid(0, 0);//The reason of this line is in the last page of lab7.pdf.
-            if (!execve(argv[0], argv, environ)) {
+
+            if (execve(argv[0], argv, environ) < 0) {
                 printf("%s: Command not found.\n", argv[0]);
                 exit(0);
             }
         }
         
         if (!bg) {
-            if (sigprocmask(SIG_BLOCK, &mask_all, NULL) < 0) {
-                unix_error("Sigprocmask error");
-            }
+            Sigprocmask(SIG_BLOCK, &mask_all, NULL);
             addjob(jobs, pid, FG, cmdline);
-            if (sigprocmask(SIG_SETMASK, &prev_one, NULL) < 0) {
-                unix_error("Sigprocmask error");
-            }
             waitfg(pid);
+            Sigprocmask(SIG_SETMASK, &prev_one, NULL);
         }
         else {
-            if (sigprocmask(SIG_BLOCK, &mask_all, NULL) < 0) {
-                unix_error("Sigprocmask error");
-            }
+            Sigprocmask(SIG_BLOCK, &mask_all, NULL);
             addjob(jobs, pid, BG, cmdline);
-            if (sigprocmask(SIG_SETMASK, &prev_one, NULL) < 0) {
-                unix_error("Sigprocmask error");
-            }
+            Sigprocmask(SIG_SETMASK, &prev_one, NULL);
             struct job_t * bg_job = getjobpid(jobs, pid);
             printf("[%d] (%d) %s",bg_job -> jid ,bg_job -> pid, cmdline);
         }
@@ -296,17 +284,11 @@ int builtin_cmd(char **argv) //about 25 lines
         exit(0);
     }
     else if (!strcmp(argv[0], "jobs")) {
-        sig_t mask_all, prev_all;
-        if (sigfillset(&mask_all) < 0) {
-            unix_error("Sigfillset error");
-        }
-        if (sigprocmask(SIG_BLOCK, &mask_all, &prev_all)) {
-            unix_error("Sigprocmask error");
-        }
+        sigset_t mask_all, prev_all;
+        Sigfillset(&mask_all);
+        Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
         listjobs(jobs);
-        if (sigprocmask(SIG_SETMASK, &prev_all, NULL) < 0) {
-            unix_error("Sigprocmask error");
-        }
+        Sigprocmask(SIG_SETMASK, &prev_all, NULL);
         return 1;
     }
     else if (!strcmp(argv[0], "bg")) {
@@ -331,8 +313,11 @@ void do_bgfg(char **argv) //about 50 lines
  */
 void waitfg(pid_t pid) //about 20 lines
 {
-    while (getjobpid(jobs, pid)) {
-       sleep(1);
+    sigset_t mask;
+    Sigemptyset(&mask);
+
+    while (fgpid(jobs)) {
+       sigsuspend(&mask);
     }
     return;
 }
@@ -353,15 +338,16 @@ void sigchld_handler(int sig)
     int olderrno = errno;
     sigset_t mask_all, prev_all;
     pid_t pid;
-    sigfillset(&mask_all);
-    while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
+    int status;
 
-        if (sigprocmask(SIG_BLOCK, &mask_all, &prev_all) < 0) {
-            unix_error("Sigprocmask error");
-        }
+    Sigfillset(&mask_all);
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+        int job_id = getjobpid(jobs, pid) -> jid;
         deletejob(jobs, pid);
-        if (sigprocmask(SIG_SETMASK, &prev_all, NULL) < 0) {
-            unix_error("Sigprocmask error");
+        Sigprocmask(SIG_SETMASK, &prev_all, NULL);
+        if (WIFSIGNALED(status)) {
+            printf("Job [%d] (%d) terminated by signal %d\n",job_id ,pid, WTERMSIG(status));
         }
     }
     if (errno != ECHILD) {
@@ -381,20 +367,12 @@ void sigint_handler(int sig)
     int olderrno = errno;
     sigset_t mask_all, prev_all;
 
-    if (sigfillset(&mask_all) < 0) {
-        unix_error("Sigfillset error");
-    }
-    if (sigprocmask(SIG_BLOCK, &mask_all, &prev_all) < 0) {
-        unix_error("Sigprocmask error");
-    }
+    Sigfillset(&mask_all);
+    Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
     int fg_pid = fgpid(jobs);
-    if (sigprocmask(SIG_SETMASK, &prev_all, NULL) < 0) {
-        unix_error("Sigprocmask error");
-    }
+    Sigprocmask(SIG_SETMASK, &prev_all, NULL);
     if (fg_pid) {//if there is no foreboard jobs
-        if (kill(-fg_pid, 2) < 0) {
-            unix_error("Kill error");
-        }
+        Kill(-fg_pid, sig);
     }
 
     errno = olderrno;
@@ -408,6 +386,14 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
+    int olderrno = errno;
+    sigset_t mask_all, prev_all;
+
+    Sigfillset(&mask_all);
+    Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+    int fg_pid = fgpid(jobs);
+    Sigprocmask(SIG_SETMASK, &prev_all, NULL);
+
     return;
 }
 
@@ -629,5 +615,42 @@ void sigquit_handler(int sig)
     exit(1);
 }
 
+/* Wrapper of Unix system functions */
+int Fork(void) {
+    pid_t pid;
 
+    if ((pid = fork()) < 0) {
+        unix_error("Fork error");
+    }
+    return pid;
+}
 
+void Kill(int pid, int sig) {
+    if (kill(pid, sig) < 0) {
+        unix_error("Kill error");
+    }
+}
+
+void Sigfillset(sigset_t *mask) {
+    if (sigfillset(mask) < 0) {
+        unix_error("Sigfillset error");
+    }
+}
+
+void Sigemptyset(sigset_t *mask) {
+    if (sigemptyset(mask) < 0) {
+        unix_error("Sigemptyset error");
+    }
+}
+
+void Sigaddset(sigset_t *mask, int sig) {
+    if (sigaddset(mask, sig) < 0) {
+        unix_error("Sigaddset error");
+    }
+}
+
+void Sigprocmask(int sig, sigset_t *mask, sigset_t *mask_prev) {
+    if (sigprocmask(sig, mask, mask_prev) < 0) {
+        unix_error("Sigprocmask error");
+    }
+}
