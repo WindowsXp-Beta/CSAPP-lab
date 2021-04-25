@@ -190,7 +190,7 @@ void eval(char *cmdline) //about 70 lines
             setpgid(0, 0);//The reason of this line is in the last page of lab7.pdf.
 
             if (execve(argv[0], argv, environ) < 0) {
-                printf("%s: Command not found.\n", argv[0]);
+                printf("%s: Command not found\n", argv[0]);
                 exit(0);
             }
         }
