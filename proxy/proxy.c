@@ -57,15 +57,12 @@ int main(int argc, char **argv)
     /* 作为client端 */
     int clientfd;
 
-    char hostname[MAXLINE], port[MAXLINE], path[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
-    char buf_server[MAXLINE], buf_client[MAXLINE];
-    char rep_from_server[MAXLINE], rep_head_to_client[MAXLINE], rep_body_to_client[MAXLINE];
-    char logString[MAXLINE];
+    
 
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
     rio_t rio_client, rio_server;
-    size_t size;//size return from end server
+    ssize_t cont_length, size;//size return from end server
 
     /* Check arguments */
     if (argc != 2) {
@@ -75,16 +72,31 @@ int main(int argc, char **argv)
     
     listenfd = Open_listenfd(argv[1]);
     while(1) {
+        char hostname[MAXLINE]={'\0'}, port[MAXLINE]={'\0'}, path[MAXLINE]={'\0'}, method[MAXLINE]={'\0'}, uri[MAXLINE]={'\0'}, version[MAXLINE]={'\0'};
+        char req_to_server[MAXLINE]={'\0'}, req_from_client[MAXLINE]={'\0'};
+        char resp_from_server[MAXLINE]={'\0'}, resp_head_to_client[MAXLINE]={'\0'};
+        char logString[MAXLINE]={'\0'};
+        ssize_t get;
+        size = cont_length = 0;
+
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
-        Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
-        printf("Accepted connection from (%s, %s)\n", hostname, port);
+        // Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
+        // printf("Accepted connection from (%s, %s)\n", hostname, port);
 
         /* 处理http请求 */
         Rio_readinitb(&rio_client, connfd);
-        Rio_readlineb_w(&rio_client, buf_client, MAXLINE);
-        sscanf(buf_client, "%s %s %s", method, uri, version);
-        
+        if(0 == Rio_readlineb_w(&rio_client, req_from_client, MAXLINE)) {
+            fprintf(stderr, "Wrong request from client\n");
+            Close(connfd);
+            continue;
+        }
+        if(3 != sscanf(req_from_client, "%s %s %s", method, uri, version)) {
+            fprintf(stderr, "Wrong request format\n");
+            Close(connfd);
+            continue;
+        }
+        // printf("request is \n%s", req_from_client);
         /* close it from telnet, for debug */
         if(strcmp(method, "STOP") == 0) {
             Close(connfd);
@@ -100,38 +112,96 @@ int main(int argc, char **argv)
         /* 作为client向url发送请求 */
         clientfd = Open_clientfd(hostname, port);
         /* build HTTP request */
-        sprintf(buf_server, "%s /%s %s\r\n", method, path, "HTTP/1.1");
+        /* build header */
+        sprintf(req_to_server, "%s /%s %s\r\n", method, path, version);
+        Rio_writen_w(clientfd, req_to_server, strlen(req_to_server));
+        memset(req_to_server, 0, MAXLINE);
 
-        do {
-            Rio_readlineb_w(&rio_client, buf_client, MAXLINE);
-            sprintf(buf_server, "%s%s", buf_server, buf_client);
-        } while(strcmp(buf_client, "\r\n"));
-        // printf("request header is\n%s", buf_server);
-        /* send Http request */
-        Rio_writen_w(clientfd, buf_server, strlen(buf_server));
-
-        /* receive reponse header from server and set reponse header to client */
-        Rio_readinitb(&rio_server, clientfd);
-        do {
-            Rio_readlineb_w(&rio_server, rep_from_server, MAXLINE);
-            if(strncasecmp(rep_from_server, "Content-Length", 14) == 0) {
-                size = strtol(rep_from_server + 16, NULL, 10);
-                // printf("%lu\n", size);
+        while(strcmp(req_from_client, "\r\n") && (get = Rio_readlineb_w(&rio_client, req_from_client, MAXLINE)) != 0) {
+            if(strncasecmp(req_from_client, "Content-Length", 14) == 0) {
+                cont_length = strtol(req_from_client + 16, NULL, 10);
             }
-            sprintf(rep_head_to_client, "%s%s", rep_head_to_client, rep_from_server);
-        } while(strcmp(rep_from_server, "\r\n"));
-        format_log_entry(logString, &clientaddr, uri, size);
-        printf("%s\n", logString);
-        /* sent response header to client */
-        Rio_writen_w(connfd, rep_head_to_client, strlen(rep_head_to_client));
-
-        /* sent response body to client */
-        while(size > 0) {
-            size -= Rio_readlineb_w(&rio_server, rep_from_server, MAXLINE);
-            Rio_writen_w(connfd, rep_from_server, strlen(rep_from_server));
+            sprintf(req_to_server, "%s%s", req_to_server, req_from_client);
+        }
+        if (0 == get) {
+            fprintf(stderr, "Wrong request header from client\n");
+            Close(connfd);
+            Close(clientfd);
+            continue;
+        }
+        // printf("request header is\n%s", req_to_server);
+        /* send Http request header */
+        Rio_writen_w(clientfd, req_to_server, strlen(req_to_server));
+        /* build request body if method not GET*/
+        if(strcmp(method, "GET")) {
+            while(cont_length > 0) {
+                if(Rio_readnb_w(&rio_client, req_from_client, 1)) {
+                    cont_length--;
+                    Rio_writen_w(clientfd, req_from_client, 1);
+                }
+                else break;
+            }
+            if(cont_length > 0) {
+                fprintf(stderr, "Wrong request body\n");
+                Close(connfd);
+                Close(clientfd);
+                continue;
+            }
+        }
+        
+        /* receive reponse from server and set reponse to client */
+        Rio_readinitb(&rio_server, clientfd);
+        /* receive response */
+        if((get = Rio_readlineb_w(&rio_server, resp_from_server, MAXLINE)) == 0) {
+            fprintf(stderr, "Wrong response from server\n");
+            Close(connfd);
+            Close(clientfd);
+            continue;
+        }
+        /* receive response header */
+        do {
+            size += get;
+            if(strncasecmp(resp_from_server, "Content-Length", 14) == 0) {
+                cont_length = strtol(resp_from_server + 16, NULL, 10);
+            }
+            sprintf(resp_head_to_client, "%s%s", resp_head_to_client, resp_from_server);
+        } while(strcmp(resp_from_server, "\r\n") && ((get = Rio_readlineb_w(&rio_server, resp_from_server, MAXLINE)) != 0));
+        
+        if (0 == get) {
+            fprintf(stderr, "Wrong response header from server\n");
+            Close(connfd);
+            Close(clientfd);
+            continue;
         }
 
+        /* sent response header to client */
+        Rio_writen_w(connfd, resp_head_to_client, strlen(resp_head_to_client));
 
+        /* sent response body to client */
+        // while(cont_length > 0) {
+        //     size_t rec_size = (cont_length < MAXLINE) ? cont_length : MAXLINE;
+        //     ssize_t len = Rio_readlineb_w(&rio_server, rep_from_server, rec_size + 1);
+        //     cont_length -= len;
+        //     size += len;
+        //     Rio_writen_w(connfd, rep_from_server, len);
+        // }
+        while(cont_length > 0) {
+            if (Rio_readnb_w(&rio_server, resp_from_server, 1)) {
+                cont_length--;
+                size++;
+                Rio_writen_w(connfd, resp_from_server, 1);
+            }
+            else break;
+        }
+        if(cont_length > 0) {
+            fprintf(stderr, "Wrong response body\n");
+            Close(connfd);
+            Close(clientfd);
+            continue;
+        }
+        
+        format_log_entry(logString, &clientaddr, uri, size);
+        printf("%s\n", logString);
         Close(clientfd);
         Close(connfd);
     }

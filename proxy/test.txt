@@ -1,0 +1,11 @@
+[ 2 pts] Part I.1: GET without parameter... Pass
+[ 3 pts] Part I.2: GET with paramter... Pass
+[ 5 pts] Part I.3: POST... Pass
+[ 5 pts] Part I.4: server/client crash... Pass
+[ 5 pts] Part I.5: lag... Pass
+[ 5 pts] Part I.6: long line... Pass
+[10 pts] Part I.7: combine them all... Round 1... Round 2... Round 3... Pass
+[15 pts] Part II.1: download big file + access web... Round 1... Timeout
+[15 pts] Part II.2: multiple small access... Timeout
+
+Score: 35 / 65
