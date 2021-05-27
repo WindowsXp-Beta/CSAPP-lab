@@ -544,15 +544,9 @@ def do_part1_4(server, server_port, client, proxy, in_part1_7=False):
     body += random_string(random.randint(10, 20))
     body += "\r\n"
     body += random_bytes(random.randint(300, 500))
-    # random.seed(2)
-    random.seed(5)
     req = HttpRequest("POST", server_ip, server_port, path, body)
-    print req.raw
     # crash in request
-    wxp = random.randint(1, req.head_line_end - 1)
-    print wxp
-    print req.raw[wxp]
-    send_req_crash(client, req, wxp)
+    send_req_crash(client, req, random.randint(1, req.head_line_end - 1))
     check_proxy_alive(proxy)
 
     if not in_part1_7:
@@ -560,11 +554,8 @@ def do_part1_4(server, server_port, client, proxy, in_part1_7=False):
     else:
         restart_sc(server, client)
 
-    wxp = random.randint(req.head_line_end, req.header_end )
-    print wxp
-    print req.raw[wxp]
     # crash in header
-    send_req_crash(client, req, wxp)
+    send_req_crash(client, req, random.randint(req.head_line_end, req.header_end - 1))
     check_proxy_alive(proxy)
 
     if not in_part1_7:
@@ -573,10 +564,7 @@ def do_part1_4(server, server_port, client, proxy, in_part1_7=False):
         restart_sc(server, client)
 
     # crash in body
-    wxp = random.randint(req.header_end, req.body_end - 1)
-    print wxp
-    print req.raw[wxp]
-    send_req_crash(client, req, wxp)
+    send_req_crash(client, req, random.randint(req.header_end, req.body_end - 1))
     check_proxy_alive(proxy)
 
     if not in_part1_7:
