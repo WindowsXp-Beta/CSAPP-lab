@@ -72,7 +72,7 @@ void *handle_one_client(void* *params) {
         Close(connfd);
         return NULL;
     }
-    if(3 != sscanf(req_from_client, "%s %s %s", method, uri, version)) {
+    if(3 != sscanf(req_from_client, "%s %s %s", method, uri, version) || strcmp(version, "HTTP/1.1")) {
         fprintf(stderr, "Wrong request format\n");
         Close(connfd);
         return NULL;
@@ -99,6 +99,11 @@ void *handle_one_client(void* *params) {
     memset(req_to_server, 0, MAXLINE);
 
     while(strcmp(req_from_client, "\r\n") && (get = Rio_readlineb_w(&rio_client, req_from_client, MAXLINE)) != 0) {
+        // if(req_from_client[get - 1] != '\n') {
+        //     Close(connfd);
+        //     Close(clientfd);
+        //     return NULL;
+        // }
         if(strncasecmp(req_from_client, "Content-Length", 14) == 0) {
             cont_length = strtol(req_from_client + 16, NULL, 10);
         }
@@ -115,6 +120,11 @@ void *handle_one_client(void* *params) {
     Rio_writen_w(clientfd, req_to_server, strlen(req_to_server));
     /* build request body if method not GET */
     if(strcmp(method, "GET")) {
+        if (cont_length == 0) {
+            Close(connfd);
+            Close(clientfd);
+            return NULL;
+        }
         while(cont_length > 0) {
             if(Rio_readnb_w(&rio_client, req_from_client, 1)) {
                 cont_length--;
