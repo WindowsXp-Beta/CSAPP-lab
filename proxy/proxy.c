@@ -43,6 +43,7 @@ void Rio_writen_w(int fd, void *usrbuf, size_t n)
     if (rio_writen(fd, usrbuf, n) != n)
     {
         fprintf(stderr, "Rio_writen error: %s\n", strerror(errno));
+        fflush(stderr);
         return;
     }
 }
@@ -112,7 +113,7 @@ void *handle_one_client(void* *params) {
     // printf("request header is\n%s", req_to_server);
     /* send Http request header */
     Rio_writen_w(clientfd, req_to_server, strlen(req_to_server));
-    /* build request body if method not GET*/
+    /* build request body if method not GET */
     if(strcmp(method, "GET")) {
         while(cont_length > 0) {
             if(Rio_readnb_w(&rio_client, req_from_client, 1)) {
@@ -121,6 +122,15 @@ void *handle_one_client(void* *params) {
             }
             else break;
         }
+        // while(cont_length > 0) {
+        //     size_t rec_size = (cont_length < MAXLINE) ? cont_length : MAXLINE;
+        //     ssize_t len;
+        //     if ((len = Rio_readlineb_w(&rio_client, req_from_client, rec_size + 1)) > 0) {
+        //         cont_length -= len;
+        //         Rio_writen_w(clientfd, req_from_client, len);
+        //     }
+        //     else break;
+        // }
         if(cont_length > 0) {
             fprintf(stderr, "Wrong request body\n");
             Close(connfd);
@@ -160,10 +170,22 @@ void *handle_one_client(void* *params) {
     /* sent response body to client */
     // while(cont_length > 0) {
     //     size_t rec_size = (cont_length < MAXLINE) ? cont_length : MAXLINE;
-    //     ssize_t len = Rio_readlineb_w(&rio_server, rep_from_server, rec_size + 1);
+    //     ssize_t len;
+    //     if ((len = Rio_readlineb_w(&rio_server, resp_from_server, rec_size + 1)) > 0) {
+    //         cont_length -= len;
+    //         size += len;
+    //         Rio_writen_w(connfd, resp_from_server, len);
+    //     }
+    //     else break;
+    // }
+    // while(cont_length > 0) {//这样就可以，等到读完了cont_length就退出
+    //     printf("execute and length is %lu\n", cont_length);
+    //     size_t rec_size = (cont_length < MAXLINE) ? cont_length : MAXLINE;
+    //     ssize_t len = Rio_readlineb_w(&rio_server, resp_from_server, rec_size + 1);//加一的原因见下一条
+    //     printf("len is %lu and strlen is %lu\n", len, strlen(resp_from_server));
     //     cont_length -= len;
     //     size += len;
-    //     Rio_writen_w(connfd, rep_from_server, len);
+    //     Rio_writen_w(connfd, resp_from_server, len);
     // }
     while(cont_length > 0) {
         if (Rio_readnb_w(&rio_server, resp_from_server, 1)) {
