@@ -44,7 +44,7 @@ size_t CHUNKSIZE;//get from getpagesize()
 
 #define SUCC(bp) (char*)(bp)
 #define PREV(bp) ((char*)(bp) + DSIZE)
-#define GET_SUCC(bp) (*(unsigned long*)SUCC(bp))//unsigned long is equal to **void
+#define GET_SUCC(bp) (*(unsigned long*)SUCC(bp))//unsigned long is equal to void*
 #define GET_PREV(bp) (*(unsigned long*)PREV(bp))
 
 static char* heap_listp;
@@ -129,16 +129,19 @@ static void* extend_heap(size_t words) {
 int mm_init(void)
 {
     CHUNKSIZE = mem_pagesize();
-    if((heap_listp = mem_sbrk(FREE_LIST_NUM * DSIZE + DSIZE)) == (void*)-1)
+    if((heap_listp = mem_sbrk(FREE_LIST_NUM * DSIZE + DSIZE + DSIZE)) == (void*)-1)
         return -1;
     PUT(heap_listp, 0);
-    PUT(heap_listp + FREE_LIST_NUM * DSIZE + WSIZE, PACK(0, 1));
+    PUT(heap_listp + FREE_LIST_NUM * DSIZE + WSIZE, PACK(DSIZE, 1));
+    PUT(heap_listp + FREE_LIST_NUM * DSIZE + DSIZE, PACK(DSIZE, 1));
+    PUT(heap_listp + FREE_LIST_NUM * DSIZE + DSIZE + WSIZE, PACK(0, 1));
+
 
     freeList_head = heap_listp + WSIZE;
     for(int i = 0; i < FREE_LIST_NUM; i++) {
         PUT_LONG(freeList_head + i * 8, NULL);
     }
-    insert_list(CHUNKSIZE, heap_listp + FREE_LIST_NUM * DSIZE + DSIZE);
+    insert_list(CHUNKSIZE, heap_listp + FREE_LIST_NUM * DSIZE + DSIZE + DSIZE);
     //begin extend
     void* bp;
     size_t words = CHUNKSIZE/WSIZE, size;
@@ -151,11 +154,10 @@ int mm_init(void)
 }
 
 void* find_fit(size_t size) {
-    void** head_ptr;
+    void* head_ptr;
     int index = get_index(size);
     for(int i = index; i < 9; i++) {
-        head_ptr = freeList_head + i * 8;
-        head_ptr = (*head_ptr);
+        head_ptr = *(unsigned long*)(freeList_head + i * 8);
         while(head_ptr != NULL) {
             if( GET_SIZE(HDRP(head_ptr)) >= size) {
                 return head_ptr;
@@ -168,7 +170,7 @@ void* find_fit(size_t size) {
 
 void place(void* bp, size_t asize) {
     size_t csize = GET_SIZE(HDRP(bp));
-    printf("csize is %lu\n", csize);
+    // printf("csize is %lu\n", csize);
     size_t left = csize - asize;
     if(left >= 24) {//need split
         PUT(HDRP(bp), PACK(asize, 1));
