@@ -52,6 +52,22 @@ static char* heap_listp;
 void* freeList_head;
 #define FREE_LIST_NUM 9
 
+inline void printList(void ** p) {
+    void * iterator = *p;
+    while(iterator) {
+        size_t size = GET_SIZE(HDRP(iterator));
+        size_t alloc = GET_ALLOC(HDRP(iterator));
+        printf("block at %lu, size is %lu, alloc is %lu\n", iterator, size, alloc);
+        iterator = GET_SUCC(iterator);
+    }
+}
+inline void printAllList() {
+    for(int i = 0; i < FREE_LIST_NUM; i++) {
+        printf("Print List %d\n", i);
+        printList(freeList_head + i * 8);
+    }
+}
+
 inline int get_index(size_t size) {
     for(int i = 12; i >= 5; i--) {
         if((size >> i) > 0) {
@@ -172,17 +188,16 @@ void place(void* bp, size_t asize) {
     size_t csize = GET_SIZE(HDRP(bp));
     // printf("csize is %lu\n", csize);
     size_t left = csize - asize;
+    remove_list(bp);
     if(left >= 24) {//need split
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
-        remove_list(bp);
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(left, 0));
         PUT(FTRP(bp), PACK(left, 0));
         insert_list(left, bp);
     }
     else {//dont need split
-        remove_list(bp);
         PUT(HDRP(bp), PACK(csize, 1));
         PUT(FTRP(bp), PACK(csize, 1));
     }
@@ -224,6 +239,8 @@ void mm_free(void *ptr)
     PUT(HDRP(ptr), PACK(size, 0));
     PUT(FTRP(ptr), PACK(size, 0));
     coalesce(ptr);
+    // printf("-----after free-----\n");
+    // printAllList();
 }
 
 /*
@@ -245,7 +262,7 @@ void *mm_realloc(void *ptr, size_t size)
     
     if(asize <= old_size) {
         size_t left = old_size - asize;
-        if(left >= 24) {//need split and dont need data copy
+        if(left >= 1024) {//need split and dont need data copy
             PUT(HDRP(ptr), PACK(asize, 1));
             PUT(FTRP(ptr), PACK(asize, 1));
             void* free_block = NEXT_BLKP(ptr);
@@ -259,9 +276,68 @@ void *mm_realloc(void *ptr, size_t size)
         }
     }
     else { //asize > old_size
-        void* new_ptr = mm_malloc(size);
-        memcpy(new_ptr, ptr, old_size - DSIZE);
-        mm_free(ptr);
-        return new_ptr;
+        size_t lack = asize - old_size;
+        size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
+        size_t next_size = GET_SIZE(HDRP(NEXT_BLKP(ptr)));
+        // printf("alloc %lu\n", next_alloc);
+        // printf("old %lu\n", old_size);
+        // printf("next %lu\n", next_size);
+        // printAllList();
+        if(!next_alloc) {//如果后面的块空闲
+            old_size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
+        }
+        if(!next_size) {//如果到堆底了
+            size_t extendSize = MAX(lack, CHUNKSIZE);
+            // printf("%d\n", extendSize);
+            extend_heap(extendSize/WSIZE);
+            old_size += extendSize;
+        }
+        if(old_size >= asize) {//合并这两块，无需memcpy
+            size_t left = old_size - asize;
+            remove_list(NEXT_BLKP(ptr));
+            if(left >= 1024) {
+                PUT(HDRP(ptr), PACK(asize, 1));
+                PUT(FTRP(ptr), PACK(asize, 1));
+                void* newFree = NEXT_BLKP(ptr);
+                PUT(HDRP(newFree), PACK(left, 0));
+                PUT(FTRP(newFree), PACK(left, 0));
+                insert_list(left, newFree);
+                return ptr;
+            }
+            else {
+                PUT(HDRP(ptr), PACK(old_size, 1));
+                PUT(FTRP(ptr), PACK(old_size, 1));
+                return ptr;
+            }
+        }
+        // size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(ptr)));
+        // if(!prev_alloc && !next_alloc) {//如果前面的块和后面的块都空闲
+        //     old_size += GET_SIZE(FTRP(PREV_BLKP(ptr)));
+        //     if(old_size >= asize) {
+        //         size_t left = old_size - asize;
+        //         remove_list(PREV_BLKP(ptr));
+        //         remove_list(NEXT_BLKP(ptr));
+        //         if(left >= 24) {
+        //             ptr = PREV_BLKP(ptr);
+        //             PUT(HDRP(ptr), PACK(asize, 1));
+        //             PUT(FTRP(ptr), PACK(asize, 1));
+        //             void* newFree = NEXT_BLKP(ptr);
+        //             insert_list(newFree, left);
+        //             return ptr;
+        //         }
+        //         else {
+        //             ptr = PREV_BLKP(ptr);
+        //             PUT(HDRP(ptr), PACK(old_size, 1));
+        //             PUT(FTRP(ptr), PACK(old_size, 1));
+        //             return ptr;
+        //         }
+        //     }
+        // }
+        else {
+            void* new_ptr = mm_malloc(size);
+            memcpy(new_ptr, ptr, old_size - DSIZE);
+            mm_free(ptr);
+            return new_ptr;
+        }
     }
 }
