@@ -144,7 +144,7 @@ static void* extend_heap(size_t words) {
  */
 int mm_init(void)
 {
-    CHUNKSIZE = mem_pagesize();
+    CHUNKSIZE = mem_pagesize() + 640;
     if((heap_listp = mem_sbrk(FREE_LIST_NUM * DSIZE + DSIZE + DSIZE)) == (void*)-1)
         return -1;
     PUT(heap_listp, 0);
@@ -259,24 +259,23 @@ void *mm_realloc(void *ptr, size_t size)
     else asize = ALIGN(size + DSIZE);//size + header + footer
     
     if(asize <= old_size) {
-        size_t left = old_size - asize;
-        if(left >= 1024) {//need split and dont need data copy
-            PUT(HDRP(ptr), PACK(asize, 1));
-            PUT(FTRP(ptr), PACK(asize, 1));
-            void* free_block = NEXT_BLKP(ptr);
-            PUT(HDRP(free_block), PACK(left, 0));
-            PUT(FTRP(free_block), PACK(left, 0));
-            insert_list(left, free_block);
+        // size_t left = old_size - asize;
+        // if(left >= 1024) {//need split and dont need data copy
+        //     PUT(HDRP(ptr), PACK(asize, 1));
+        //     PUT(FTRP(ptr), PACK(asize, 1));
+        //     void* free_block = NEXT_BLKP(ptr);
+        //     PUT(HDRP(free_block), PACK(left, 0));
+        //     PUT(FTRP(free_block), PACK(left, 0));
+        //     insert_list(left, free_block);
+        //     return ptr;
+        // }
+        // else {//dont need split and dont need data copy
             return ptr;
-        }
-        else {//dont need split and dont need data copy
-            return ptr;
-        }
+        // }
     }
     else { //asize > old_size
         size_t lack = asize - old_size;
         size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
-        size_t next_size = GET_SIZE(HDRP(NEXT_BLKP(ptr)));
         // printf("alloc %lu\n", next_alloc);
         // printf("old %lu\n", old_size);
         // printf("next %lu\n", next_size);
@@ -284,29 +283,48 @@ void *mm_realloc(void *ptr, size_t size)
         if(!next_alloc) {//如果后面的块空闲
             old_size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
         }
-        if(!next_size) {//如果到堆底了
-            size_t extendSize = MAX(lack, CHUNKSIZE);
-            // printf("%d\n", extendSize);
-            extend_heap(extendSize/WSIZE);
-            old_size += extendSize;
-        }
+        
         if(old_size >= asize) {//合并这两块，无需memcpy
-            size_t left = old_size - asize;
+            // size_t left = old_size - asize;
             remove_list(NEXT_BLKP(ptr));
-            if(left >= 1024) {
-                PUT(HDRP(ptr), PACK(asize, 1));
-                PUT(FTRP(ptr), PACK(asize, 1));
-                void* newFree = NEXT_BLKP(ptr);
-                PUT(HDRP(newFree), PACK(left, 0));
-                PUT(FTRP(newFree), PACK(left, 0));
-                insert_list(left, newFree);
-                return ptr;
-            }
-            else {
+            // if(left >= 1024) {
+            //     PUT(HDRP(ptr), PACK(asize, 1));
+            //     PUT(FTRP(ptr), PACK(asize, 1));
+            //     void* newFree = NEXT_BLKP(ptr);
+            //     PUT(HDRP(newFree), PACK(left, 0));
+            //     PUT(FTRP(newFree), PACK(left, 0));
+            //     insert_list(left, newFree);
+            //     return ptr;
+            // }
+            // else {
                 PUT(HDRP(ptr), PACK(old_size, 1));
                 PUT(FTRP(ptr), PACK(old_size, 1));
                 return ptr;
-            }
+            // }
+        }
+        size_t prev_alloc = GET_ALLOC(HDRP(PREV_BLKP(ptr)));//后面的块要么不空闲，要么加上之后还不够
+        // if(!prev_alloc) {
+        //     if(old_size + GET_SIZE(HDRP(PREV_BLKP(ptr))) >= asize) {
+        //         old_size += GET_SIZE(HDRP(PREV_BLKP(ptr)));
+        //         void * newPtr = PREV_BLKP(ptr);
+        //         remove_list(newPtr);
+        //         memcpy(newPtr, ptr, GET_SIZE(HDRP(ptr)));
+        //         PUT(HDRP(newPtr), PACK(old_size, 1));
+        //         PUT(FTRP(newPtr), PACK(old_size, 1));
+        //         return newPtr;
+        //     }
+        // }
+        size_t next_size = GET_SIZE(HDRP(NEXT_BLKP(ptr)));
+        if(!next_size) {//如果到堆底了
+            size_t extendSize = MAX(lack, CHUNKSIZE);
+            extend_heap(extendSize/WSIZE);
+            old_size += extendSize;
+        }
+        if(old_size >= asize) {
+            remove_list(NEXT_BLKP(ptr));
+            PUT(HDRP(ptr), PACK(old_size, 1));
+            PUT(FTRP(ptr), PACK(old_size, 1));
+            return ptr;
         }
         else {
             void* new_ptr = mm_malloc(size);
