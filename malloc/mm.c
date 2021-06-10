@@ -61,7 +61,7 @@ inline void printList(void ** p) {
         iterator = GET_SUCC(iterator);
     }
 }
-inline void printAllList() {
+inline void heapChecker() {
     for(int i = 0; i < FREE_LIST_NUM; i++) {
         printf("Print List %d\n", i);
         printList(freeList_head + i * 8);
@@ -239,8 +239,6 @@ void mm_free(void *ptr)
     PUT(HDRP(ptr), PACK(size, 0));
     PUT(FTRP(ptr), PACK(size, 0));
     coalesce(ptr);
-    // printf("-----after free-----\n");
-    // printAllList();
 }
 
 /*
@@ -282,7 +280,7 @@ void *mm_realloc(void *ptr, size_t size)
         // printf("alloc %lu\n", next_alloc);
         // printf("old %lu\n", old_size);
         // printf("next %lu\n", next_size);
-        // printAllList();
+        // heapChecker();
         if(!next_alloc) {//如果后面的块空闲
             old_size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
         }
@@ -310,29 +308,6 @@ void *mm_realloc(void *ptr, size_t size)
                 return ptr;
             }
         }
-        // size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(ptr)));
-        // if(!prev_alloc && !next_alloc) {//如果前面的块和后面的块都空闲
-        //     old_size += GET_SIZE(FTRP(PREV_BLKP(ptr)));
-        //     if(old_size >= asize) {
-        //         size_t left = old_size - asize;
-        //         remove_list(PREV_BLKP(ptr));
-        //         remove_list(NEXT_BLKP(ptr));
-        //         if(left >= 24) {
-        //             ptr = PREV_BLKP(ptr);
-        //             PUT(HDRP(ptr), PACK(asize, 1));
-        //             PUT(FTRP(ptr), PACK(asize, 1));
-        //             void* newFree = NEXT_BLKP(ptr);
-        //             insert_list(newFree, left);
-        //             return ptr;
-        //         }
-        //         else {
-        //             ptr = PREV_BLKP(ptr);
-        //             PUT(HDRP(ptr), PACK(old_size, 1));
-        //             PUT(FTRP(ptr), PACK(old_size, 1));
-        //             return ptr;
-        //         }
-        //     }
-        // }
         else {
             void* new_ptr = mm_malloc(size);
             memcpy(new_ptr, ptr, old_size - DSIZE);
