@@ -12,7 +12,7 @@
 
 #include "mm.h"
 #include "memlib.h"
-
+#define DEBUGx
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
 
@@ -57,10 +57,11 @@ inline void printList(void ** p) {
     while(iterator) {
         size_t size = GET_SIZE(HDRP(iterator));
         size_t alloc = GET_ALLOC(HDRP(iterator));
-        printf("block at %lu, size is %lu, alloc is %lu\n", iterator, size, alloc);
+        printf("block at %lu, size is %lu, alloc is %lu succ is %lu prev is %lu\n", iterator, size, alloc, GET_SUCC(iterator), GET_PREV(iterator));
         iterator = GET_SUCC(iterator);
     }
 }
+
 inline void heapChecker() {
     for(int i = 0; i < FREE_LIST_NUM; i++) {
         printf("Print List %d\n", i);
@@ -77,21 +78,69 @@ inline int get_index(size_t size) {
     return 0;
 }
 
-inline void insert_list(size_t size, void* bp) {
+static void insert_list(size_t size, void* bp) {
     int index = get_index(size);
-    void* old_first = (*(unsigned long*)(freeList_head + index * 8));
-    PUT_LONG(SUCC(bp), old_first);//它的NEXT为原先首元素
-    PUT_LONG(PREV(bp), freeList_head + index * 8);//它的PREV设为head
+    void* start = (*(unsigned long*)(freeList_head + index * 8));
+    // while(start) {
+    //     if(GET_SIZE(HDRP(start)) >= size) break;
+    //     start = GET_SUCC(start); 
+    // }
+    // PUT_LONG(SUCC(bp), start);//它的NEXT为原先首元素
+    // PUT_LONG(PREV(bp), freeList_head + index * 8);//它的PREV设为head
 
-    if(old_first) PUT_LONG(PREV(old_first), bp);//原先首元素的PREV
-    PUT_LONG(freeList_head + index * 8, bp);//head指向它
+    // if(old_first) PUT_LONG(PREV(old_first), bp);//原先首元素的PREV
+    // PUT_LONG(freeList_head + index * 8, bp);//head指向它
+    
+    char *pre = NULL;
+    while ((start != NULL) && (size > GET_SIZE(HDRP(start)))) {
+        pre = start;
+        start = GET_SUCC(start);
+    }// i should be first node size >= input size
+    if (start == NULL && pre == NULL) {//empty list
+        PUT_LONG(freeList_head + index * 8, bp);//head指向它
+        PUT_LONG(PREV(bp), NULL);
+        PUT_LONG(SUCC(bp), NULL);
+    } else if (start == NULL && pre != NULL) {// add the last
+        PUT_LONG(PREV(bp), pre);
+        PUT_LONG(SUCC(bp), NULL);
+        PUT_LONG(SUCC(pre), bp);
+    } else if (pre == NULL) {// add the first
+        PUT_LONG(freeList_head + index * 8, bp);//head指向它
+        PUT_LONG(PREV(start), bp);
+        PUT_LONG(SUCC(bp), start);
+        PUT_LONG(PREV(bp), NULL);
+    } else {
+        PUT_LONG(PREV(bp), pre);
+        PUT_LONG(SUCC(bp), start);
+        PUT_LONG(PREV(start), bp);
+        PUT_LONG(SUCC(pre), bp);
+    }
 }
 
-inline void remove_list(void* bp) {
-    void* succ = GET_SUCC(bp);
-    void* prev = GET_PREV(bp);
-    if(succ) PUT_LONG(PREV(succ), prev);//if next not NULL
-    PUT_LONG(SUCC(prev), succ);
+// inline 
+static void remove_list(void* bp) {
+    #ifdef DEBUG
+    printf("remove %lu\n", bp);
+    heapChecker();
+    fflush(stdout);
+    #endif
+    size_t size = GET_SIZE(HDRP(bp));
+    int index = get_index(size);
+    if(GET_PREV(bp) == NULL) {
+        PUT_LONG(freeList_head + index * 8, GET_SUCC(bp));
+        if(GET_SUCC(bp) != NULL) PUT_LONG(PREV(GET_SUCC(bp)), NULL);
+    }
+    else if(GET_SUCC(bp) == NULL) {
+        PUT_LONG(SUCC(GET_PREV(bp)), NULL);
+    }
+    else {
+        PUT_LONG(SUCC(GET_PREV(bp)), GET_SUCC(bp));
+        PUT_LONG(PREV(GET_SUCC(bp)), GET_PREV(bp));
+    }
+    // void* succ = GET_SUCC(bp);
+    // void* prev = GET_PREV(bp);
+    // if(succ) PUT_LONG(PREV(succ), prev);//if next not NULL
+    // PUT_LONG(SUCC(prev), succ);
 }
 
 static void* coalesce(void* bp) {
@@ -144,7 +193,7 @@ static void* extend_heap(size_t words) {
  */
 int mm_init(void)
 {
-    CHUNKSIZE = mem_pagesize() + 640;
+    CHUNKSIZE = mem_pagesize();
     if((heap_listp = mem_sbrk(FREE_LIST_NUM * DSIZE + DSIZE + DSIZE)) == (void*)-1)
         return -1;
     PUT(heap_listp, 0);
@@ -184,22 +233,37 @@ void* find_fit(size_t size) {
     return NULL;
 }
 
-void place(void* bp, size_t asize) {
+void* place(void* bp, size_t asize) {
     size_t csize = GET_SIZE(HDRP(bp));
-    // printf("csize is %lu\n", csize);
     size_t left = csize - asize;
     remove_list(bp);
-    if(left >= 24) {//need split
+    if(left < 24) {
+        PUT(HDRP(bp), PACK(csize, 1));
+        PUT(FTRP(bp), PACK(csize, 1));
+        return bp;
+    }
+    else if(left <= 96) {//need split
+    // else{
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(left, 0));
         PUT(FTRP(bp), PACK(left, 0));
         insert_list(left, bp);
+        return PREV_BLKP(bp);
     }
-    else {//dont need split
-        PUT(HDRP(bp), PACK(csize, 1));
-        PUT(FTRP(bp), PACK(csize, 1));
+    else {
+        PUT(HDRP(bp), PACK(left, 0));
+        PUT(FTRP(bp), PACK(left, 0));
+        insert_list(left, bp);
+        bp = NEXT_BLKP(bp);
+        PUT(HDRP(bp), PACK(asize, 1));
+        PUT(FTRP(bp), PACK(asize, 1));
+        #ifdef DEBUG
+        heapChecker();
+        fflush(stdout);
+        #endif
+        return bp;
     }
 }
 
@@ -218,14 +282,14 @@ void *mm_malloc(size_t size)
     else asize = ALIGN(size + DSIZE);//size + header + footer
 
     if((bp = find_fit(asize)) != NULL) {
-        place(bp, asize);
+        bp = place(bp, asize);
         return bp;
     } else {
         extendsize = MAX(asize, CHUNKSIZE);
         if((bp = extend_heap(extendsize/WSIZE)) == NULL) {
             return NULL;
         }
-        place(bp, asize);
+        bp = place(bp, asize);
         return bp;
     }
 }
@@ -257,74 +321,56 @@ void *mm_realloc(void *ptr, size_t size)
     size_t asize, old_size = GET_SIZE(HDRP(ptr));
     if(size <= DSIZE) asize = DSIZE + DSIZE;
     else asize = ALIGN(size + DSIZE);//size + header + footer
-    
+
     if(asize <= old_size) {
-        // size_t left = old_size - asize;
-        // if(left >= 1024) {//need split and dont need data copy
-        //     PUT(HDRP(ptr), PACK(asize, 1));
-        //     PUT(FTRP(ptr), PACK(asize, 1));
-        //     void* free_block = NEXT_BLKP(ptr);
-        //     PUT(HDRP(free_block), PACK(left, 0));
-        //     PUT(FTRP(free_block), PACK(left, 0));
-        //     insert_list(left, free_block);
-        //     return ptr;
-        // }
-        // else {//dont need split and dont need data copy
-            return ptr;
-        // }
+        return ptr;
     }
     else { //asize > old_size
         size_t lack = asize - old_size;
         size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
-        // printf("alloc %lu\n", next_alloc);
-        // printf("old %lu\n", old_size);
-        // printf("next %lu\n", next_size);
-        // heapChecker();
-        if(!next_alloc) {//如果后面的块空闲
-            old_size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
-        }
-        
-        if(old_size >= asize) {//合并这两块，无需memcpy
-            // size_t left = old_size - asize;
-            remove_list(NEXT_BLKP(ptr));
-            // if(left >= 1024) {
-            //     PUT(HDRP(ptr), PACK(asize, 1));
-            //     PUT(FTRP(ptr), PACK(asize, 1));
-            //     void* newFree = NEXT_BLKP(ptr);
-            //     PUT(HDRP(newFree), PACK(left, 0));
-            //     PUT(FTRP(newFree), PACK(left, 0));
-            //     insert_list(left, newFree);
-            //     return ptr;
-            // }
-            // else {
-                PUT(HDRP(ptr), PACK(old_size, 1));
-                PUT(FTRP(ptr), PACK(old_size, 1));
-                return ptr;
-            // }
-        }
-        size_t prev_alloc = GET_ALLOC(HDRP(PREV_BLKP(ptr)));//后面的块要么不空闲，要么加上之后还不够
-        // if(!prev_alloc) {
-        //     if(old_size + GET_SIZE(HDRP(PREV_BLKP(ptr))) >= asize) {
-        //         old_size += GET_SIZE(HDRP(PREV_BLKP(ptr)));
-        //         void * newPtr = PREV_BLKP(ptr);
-        //         remove_list(newPtr);
-        //         memcpy(newPtr, ptr, GET_SIZE(HDRP(ptr)));
-        //         PUT(HDRP(newPtr), PACK(old_size, 1));
-        //         PUT(FTRP(newPtr), PACK(old_size, 1));
-        //         return newPtr;
-        //     }
-        // }
+        size_t prev_alloc = GET_ALLOC(HDRP(PREV_BLKP(ptr)));
         size_t next_size = GET_SIZE(HDRP(NEXT_BLKP(ptr)));
         if(!next_size) {//如果到堆底了
-            size_t extendSize = MAX(lack, CHUNKSIZE);
+            // size_t extendSize = MAX(lack, CHUNKSIZE);
+            size_t extendSize = CHUNKSIZE;
             extend_heap(extendSize/WSIZE);
             old_size += extendSize;
-        }
-        if(old_size >= asize) {
             remove_list(NEXT_BLKP(ptr));
             PUT(HDRP(ptr), PACK(old_size, 1));
             PUT(FTRP(ptr), PACK(old_size, 1));
             return ptr;
+        }
+        if(!next_alloc && prev_alloc) {//如果后面的块空闲
+            old_size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
+            if(old_size >= asize) {//合并这两块，无需memcpy
+                remove_list(NEXT_BLKP(ptr));
+                PUT(HDRP(ptr), PACK(old_size, 1));
+                PUT(FTRP(ptr), PACK(old_size, 1));
+                return ptr;
+            }
+        }
+        else if(!prev_alloc && next_alloc) {
+            old_size += GET_SIZE(HDRP(PREV_BLKP(ptr)));
+            if(old_size >= asize) {
+                void * newPtr = PREV_BLKP(ptr);
+                remove_list(newPtr);
+                memcpy(newPtr, ptr, GET_SIZE(HDRP(ptr)));
+                PUT(HDRP(newPtr), PACK(old_size, 1));
+                PUT(FTRP(newPtr), PACK(old_size, 1));
+                return newPtr;
+            }
+        }
+        else if(!prev_alloc && !next_alloc) {
+            old_size += GET_SIZE(HDRP(PREV_BLKP(ptr))) + GET_SIZE(HDRP(NEXT_BLKP(ptr)));
+            if(old_size >= asize) {
+                void * newPtr = PREV_BLKP(ptr);
+                remove_list(NEXT_BLKP(ptr));
+                remove_list(newPtr);
+                memcpy(newPtr, ptr, GET_SIZE(HDRP(ptr)));
+                PUT(HDRP(newPtr), PACK(old_size, 1));
+                PUT(FTRP(newPtr), PACK(old_size, 1));
+                return newPtr;
+            }
         }
         else {
             void* new_ptr = mm_malloc(size);
