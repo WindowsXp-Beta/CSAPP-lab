@@ -25,11 +25,11 @@ team_struct team =
       Your login ID if working as a one person team
       or, ID1+ID2 where ID1 is the login ID of the first team member
       and ID2 is the login ID of the second team member */
-    "", 
+    "519021910888", 
    /* Student name 1: Replace with the full name of first team member */
-   "",
+   "Wei Xinpeng",
    /* Login ID 1: Replace with the login ID of first team member */
-   "",
+   "519021910888",
 
    /* The following should only be changed if there are two team members */
    /* Student name 2: Full name of the second team member */
@@ -175,7 +175,9 @@ NOTES:
  *   Rating: 4 
  */
 int bang(int x) {
-  return 2;
+  //if a number is none zero, its or it complement's sign bit must be 1
+  int sign = (x | (~x + 1))>>31;
+  return sign + 1;
 }
 /*
  * bitCount - returns count of number of 1's in word
@@ -185,7 +187,23 @@ int bang(int x) {
  *   Rating: 4
  */
 int bitCount(int x) {
-  return 2;
+  //masks
+  int temp = 0x55|(0x55<<8);
+  int mask1 = temp|(temp<<16);
+  int temp1 = 0x33|(0x33<<8);
+  int mask2 = temp1|(temp1<<16);
+  int temp2 = 0x0f|(0x0f<<8);
+  int mask3 = temp2|(temp2<<16);
+  int mask4 = 0xff|(0xff<<16);
+  int mask5 = 0xff|(0xff<<8);
+
+  //masking operations
+  int answer = (x&mask1) + ((x>>1) & mask1);
+  answer = (answer&mask2) + ((answer>>2) & mask2);
+  answer = (answer&mask3) + ((answer>>4) & mask3);
+  answer = (answer&mask4) + ((answer>>8) & mask4);
+  answer = (answer&mask5) + ((answer>>16) & mask5);
+  return answer;
 }
 /* 
  * copyLSB - set all bits of result to least significant bit of x
@@ -195,7 +213,8 @@ int bitCount(int x) {
  *   Rating: 2
  */
 int copyLSB(int x) {
-  return 2;
+  int LSB = x & 1;
+  return ~LSB + 1;
 }
 /* 
  * divpwr2 - Compute x/(2^n), for 0 <= n <= 30
@@ -206,7 +225,8 @@ int copyLSB(int x) {
  *   Rating: 2
  */
 int divpwr2(int x, int n) {
-    return 2;
+  int sign = ~(x >> 31)+1;
+  return (x + ((sign<<n)+(~sign+1)))>>n;
 }
 /* 
  * evenBits - return word with all even-numbered bits set to 1
@@ -215,7 +235,9 @@ int divpwr2(int x, int n) {
  *   Rating: 2
  */
 int evenBits(void) {
-  return 2;
+  int temp = 0x55|(0x55<<8);
+  int mask = temp|(temp<<16);
+  return mask;
 }
 /* 
  * fitsBits - return 1 if x can be represented as an 
@@ -227,7 +249,8 @@ int evenBits(void) {
  *   Rating: 2
  */
 int fitsBits(int x, int n) {
-  return 2;
+  int mask = x >> 31;//a mask used to check the first 33-n bits of x
+  return !((x >> (n + (~0))) ^ mask);
 }
 /* 
  * getByte - Extract byte n from word x
@@ -238,7 +261,9 @@ int fitsBits(int x, int n) {
  *   Rating: 2
  */
 int getByte(int x, int n) {
-  return 2;
+  int mask = 0xff;
+  x = x >> (n << 3);//move the byte needed to LSB
+  return x & mask;
 }
 /* 
  * isGreater - if x > y  then return 1, else return 0 
@@ -248,7 +273,19 @@ int getByte(int x, int n) {
  *   Rating: 3
  */
 int isGreater(int x, int y) {
-  return 2;
+  int difference = y + (~x+1);
+
+  //use an integer to identify the polarity of x, y and y-x
+  //0 is non-negative while 1 is negative
+  int signx = (x >> 31) & 1;
+  int signy = (y >> 31) & 1;
+  int signdif = ((difference)>>31) & 1;
+
+  //when overflow, x and y are of different polarity. what we need is y-x < 0 in normal case and y-x > 0 when overflow.
+  int condition1 = signdif;
+  int condition2 = (signx ^ signy) & (signy ^ signdif);
+  
+  return condition1 ^ condition2;
 }
 /* 
  * isNonNegative - return 1 if x >= 0, return 0 otherwise 
@@ -258,7 +295,8 @@ int isGreater(int x, int y) {
  *   Rating: 3
  */
 int isNonNegative(int x) {
-  return 2;
+  int sign = x >> 31;
+  return sign + 1;
 }
 /* 
  * isNotEqual - return 0 if x == y, and 1 otherwise 
@@ -268,7 +306,8 @@ int isNonNegative(int x) {
  *   Rating: 2
  */
 int isNotEqual(int x, int y) {
-  return 2;
+  int isnotequal = x ^ y;
+  return !!isnotequal;
 }
 /*
  * isPower2 - returns 1 if x is a power of 2, and 0 otherwise
@@ -279,7 +318,28 @@ int isNotEqual(int x, int y) {
  *   Rating: 4
  */
 int isPower2(int x) {
-  return 2;
+  //check the polarity of x to get rid of negative numbers
+  int sign = (x >> 31) & 1;
+
+  //bitcount
+  int temp = 0x55|(0x55<<8);
+  int mask1 = temp|(temp<<16);
+  int temp1 = 0x33|(0x33<<8);
+  int mask2 = temp1|(temp1<<16);
+  int temp2 = 0x0f|(0x0f<<8);
+  int mask3 = temp2|(temp2<<16);
+  int mask4 = 0xff|(0xff<<16);
+  int mask5 = 0xff|(0xff<<8);
+  
+  int answer = (x&mask1) + ((x>>1) & mask1);
+  int answer1 = (answer&mask2) + ((answer>>2) & mask2);
+  int answer2 = (answer1&mask3) + ((answer1>>4) & mask3);
+  int answer3 = (answer2&mask4) + ((answer2>>8) & mask4);
+  int answer4 = (answer3&mask5) + ((answer3>>16) & mask5);
+  //now answer4 is the number of 1 in x
+
+  int ispower = answer4 + (~0);
+  return !ispower & !sign;
 }
 /* 
  * leastBitPos - return a mask that marks the position of the
@@ -290,7 +350,7 @@ int isPower2(int x) {
  *   Rating: 4 
  */
 int leastBitPos(int x) {
-  return 2;
+  return (x ^ (x + (~0))) & x;
 }
 /* 
  * logicalShift - shift x to the right by n, using a logical shift
@@ -301,7 +361,8 @@ int leastBitPos(int x) {
  *   Rating: 3 
  */
 int logicalShift(int x, int n) {
-  return 2;
+  int mask = (1 << (32 + (~n+1))) + (~0);
+  return (x >> n) & mask;
 }
 /*
  * satAdd - adds two numbers but when positive overflow occurs, returns
@@ -314,7 +375,21 @@ int logicalShift(int x, int n) {
  *   Rating: 4
  */
 int satAdd(int x, int y) {
-  return 2;
+  /*add two number and limit the sum within the range of integer*/
+  int sum = x + y;
+
+  //use three integer to represent the polarity of x, y and x+y
+  //1 is negative, 0 is positive
+  int signx = (x >> 31) & 1;
+  int signy = (y >> 31) & 1;
+  int signsum = (sum >> 31) & 1;
+  
+  //overflow occurs when x and y are of the same polarity and the sign of sum is different from those of x and y
+  int overflow = (!(signx ^ signy)) & (signx ^ signsum);
+
+  //when overflow, right shift sum for 31 bits and turn it to corresponding possible value
+  int shift = (overflow << 5) + (~overflow+1);
+  return (sum >> shift) ^ (overflow << 31);
 }
 /* 
  * tc2sm - Convert from two's complement to sign-magnitude 
@@ -326,5 +401,9 @@ int satAdd(int x, int y) {
  *   Rating: 4
  */
 int tc2sm(int x) {
-  return 2;
+  //get the sign and the absolute value
+  int sign = x >> 31;
+  int absolute = (x ^ sign) + (~sign + 1);
+
+  return ((sign & 1) << 31) + absolute;
 }
