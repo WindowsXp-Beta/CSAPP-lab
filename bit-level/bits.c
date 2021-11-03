@@ -188,22 +188,29 @@ int bang(int x) {
  */
 int bitCount(int x) {
   //masks
-  int temp = 0x55|(0x55<<8);
-  int mask1 = temp|(temp<<16);
-  int temp1 = 0x33|(0x33<<8);
-  int mask2 = temp1|(temp1<<16);
-  int temp2 = 0x0f|(0x0f<<8);
-  int mask3 = temp2|(temp2<<16);
-  int mask4 = 0xff|(0xff<<16);
-  int mask5 = 0xff|(0xff<<8);
+  // int temp = 0x55|(0x55<<8);
+  // int mask1 = temp|(temp<<16);
+  // int temp1 = 0x33|(0x33<<8);
+  // int mask2 = temp1|(temp1<<16);
+  // int temp2 = 0x0f|(0x0f<<8);
+  // int mask3 = temp2|(temp2<<16);
+  // int mask4 = 0xff|(0xff<<16);
+  // int mask5 = 0xff|(0xff<<8);
 
-  //masking operations
-  int answer = (x&mask1) + ((x>>1) & mask1);
-  answer = (answer&mask2) + ((answer>>2) & mask2);
-  answer = (answer&mask3) + ((answer>>4) & mask3);
-  answer = (answer&mask4) + ((answer>>8) & mask4);
-  answer = (answer&mask5) + ((answer>>16) & mask5);
-  return answer;
+  // //masking operations
+  // int answer = (x&mask1) + ((x>>1) & mask1);
+  // answer = (answer&mask2) + ((answer>>2) & mask2);
+  // answer = (answer&mask3) + ((answer>>4) & mask3);
+  // answer = (answer&mask4) + ((answer>>8) & mask4);
+  // answer = (answer&mask5) + ((answer>>16) & mask5);
+  // return answer;
+
+  //another implementation
+  int m4 = 0x1 | (0x1<<8) | (0x1<<16) | (0x1<<24);
+  int m1 = 0xFF;
+  int s4 = (x&m4) + ((x>>1)&m4) + ((x>>2)&m4) + ((x>>3)&m4) + ((x>>4)&m4) + ((x>>5)&m4) + ((x>>6)&m4) + ((x>>7)&m4);
+  int s1 = (s4&m1) + ((s4>>8)&m1) + ((s4>>16)&m1) + ((s4>>24)&m1);
+  return s1;
 }
 /* 
  * copyLSB - set all bits of result to least significant bit of x
