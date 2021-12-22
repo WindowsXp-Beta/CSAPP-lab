@@ -119,7 +119,48 @@ original node
 0x405240 39d 0x000000
 ## secret phase
 how to enter
-disas phase_defused and you will find there's another sscanf and if you input nothing you will skip the secret since it will check return value of scanf.
+disas phase_defused and you will find there's another sscanf and if you input nothing you will skip the secret since it will check return value of sscanf.
+
+```assembly
+0x00000000004022da <+0>:     sub    $0x68,%rsp
+0x00000000004022de <+4>:     mov    $0x1,%edi
+0x00000000004022e3 <+9>:     callq  0x401ba5 <send_msg>
+0x00000000004022e8 <+14>:    cmpl   $0x6,0x34cd(%rip)        # 0x4057bc <num_input_strings>
+0x00000000004022ef <+21>:    je     0x4022f6 <phase_defused+28>
+0x00000000004022f1 <+23>:    add    $0x68,%rsp
+0x00000000004022f5 <+27>:    retq   
+0x00000000004022f6 <+28>:    lea    0x10(%rsp),%rcx
+0x00000000004022fb <+33>:    lea    0xc(%rsp),%rdx
+0x0000000000402300 <+38>:    lea    0x124f(%rip),%rsi        # 0x403556
+0x0000000000402307 <+45>:    lea    0x35c2(%rip),%rdi        # 0x4058d0 <input_strings+240>
+0x000000000040230e <+52>:    mov    $0x0,%eax
+0x0000000000402313 <+57>:    callq  0x401170 <__isoc99_sscanf@plt>
+0x0000000000402318 <+62>:    cmp    $0x2,%eax
+0x000000000040231b <+65>:    je     0x402337 <phase_defused+93>
+0x000000000040231d <+67>:    lea    0xf8c(%rip),%rdi        # 0x4032b0
+0x0000000000402324 <+74>:    callq  0x401060 <puts@plt>
+0x0000000000402329 <+79>:    lea    0xfb0(%rip),%rdi        # 0x4032e0
+0x0000000000402330 <+86>:    callq  0x401060 <puts@plt>
+0x0000000000402335 <+91>:    jmp    0x4022f1 <phase_defused+23>
+0x0000000000402337 <+93>:    lea    0x10(%rsp),%rdi
+0x000000000040233c <+98>:    lea    0x1219(%rip),%rsi        # 0x40355c
+0x0000000000402343 <+105>:   callq  0x40194d <strings_not_equal>
+0x0000000000402348 <+110>:   test   %eax,%eax
+0x000000000040234a <+112>:   jne    0x40231d <phase_defused+67>
+0x000000000040234c <+114>:   lea    0xefd(%rip),%rdi        # 0x403250
+0x0000000000402353 <+121>:   callq  0x401060 <puts@plt>
+0x0000000000402358 <+126>:   lea    0xf19(%rip),%rdi        # 0x403278
+0x000000000040235f <+133>:   callq  0x401060 <puts@plt>
+0x0000000000402364 <+138>:   mov    $0x0,%eax
+0x0000000000402369 <+143>:   callq  0x40185e <secret_phase>
+0x000000000040236e <+148>:   jmp    0x40231d <phase_defused+67>
+```
+
+0x34cd(%rip) 这种格式代表全局变量，`# 0x4057bc <num_input_strings>` 估计就是已经解决的phase的个数。
+
+在 .data段。可以参考ICS链接那一章，code段和data段的相对位置时不变的。所以可以用rip访问。
+
++57行的sscanf很关键，查询%rdi发现是phase4输入的数据，%rsi变成了"%d %s" austinpower就在这里输入
 
 ```c
 a = rsp + 12;
